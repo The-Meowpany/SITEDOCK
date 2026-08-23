@@ -7,6 +7,7 @@ type WorkspaceRow = {
   id: string;
   name: string;
   slug: string;
+  branding: unknown;
   createdAt: Date;
   updatedAt: Date;
   members: { userId: string; role: string; joinedAt: Date | null }[];
@@ -17,6 +18,7 @@ function toDomain(row: WorkspaceRow): Workspace {
     id: WorkspaceId(row.id),
     name: row.name,
     slug: row.slug,
+    branding: (row.branding as Record<string, unknown>) ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     members: row.members.map((m) => ({
@@ -51,8 +53,8 @@ export class PrismaWorkspaceRepository implements WorkspaceRepository {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.workspace.upsert({
         where: { id: workspace.id },
-        create: { id: workspace.id, name: workspace.name, slug: workspace.slug },
-        update: { name: workspace.name },
+        create: { id: workspace.id, name: workspace.name, slug: workspace.slug, branding: workspace.branding === null ? Prisma.DbNull : workspace.branding as Prisma.InputJsonValue },
+        update: { name: workspace.name, branding: workspace.branding === null ? Prisma.DbNull : workspace.branding as Prisma.InputJsonValue },
       });
 
       for (const member of workspace.members) {
@@ -70,4 +72,5 @@ export class PrismaWorkspaceRepository implements WorkspaceRepository {
     });
   }
 }
+
 

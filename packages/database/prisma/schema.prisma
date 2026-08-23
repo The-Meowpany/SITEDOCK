@@ -93,6 +93,7 @@ model Workspace {
   outboxEvents       OutboxEvent[]
 
   connectedAccount   ConnectedAccount?
+  branding           Json?
 
   @@map("workspaces")
 }
@@ -260,7 +261,7 @@ model WebsiteBackup {
   sourceDeployment   Deployment   @relation(fields: [sourceDeploymentId], references: [id])
   status             BackupStatus @default(READY)
   storagePath        String       @unique @map("storage_path")
-  // SHA-256 del contenido concatenado (keys ordenadas) — verificado antes de restaurar.
+  // SHA-256 del contenido concatenado (keys ordenadas) ï¿½ verificado antes de restaurar.
   integritySha256    String?      @map("integrity_sha256")
   sizeBytes          BigInt?      @map("size_bytes")
   createdAt          DateTime     @default(now()) @map("created_at")
@@ -399,7 +400,7 @@ enum InvoiceStatus {
 
 // SUBSCRIPTION invoices belong to a recurring membership; ONE_TIME invoices
 // record project fees (creation/initial deploy) charged outside any
-// subscription — exactly one of subscriptionId/websiteId is set per kind.
+// subscription ï¿½ exactly one of subscriptionId/websiteId is set per kind.
 enum InvoiceKind {
   SUBSCRIPTION
   ONE_TIME
@@ -443,7 +444,7 @@ model Payment {
   provider          String
   externalPaymentId String?       @map("external_payment_id")
   platformFeeCents  Int           @default(0) @map("platform_fee_cents")
-  // Fase 16 — reconciliación contra Stripe: ancla al balance transaction oficial.
+  // Fase 16 ï¿½ reconciliaciï¿½n contra Stripe: ancla al balance transaction oficial.
   externalBalanceTxnId String?    @map("external_balance_txn_id")
   refundedCents     Int           @default(0) @map("refunded_cents")
   createdAt         DateTime      @default(now()) @map("created_at")
@@ -498,7 +499,7 @@ model Refund {
   currency          String
   reason            String?
   status            RefundStatus @default(PENDING)
-  externalRefundId  String?     @unique @map("external_refund_id") // re_... — uniqueness = idempotency
+  externalRefundId  String?     @unique @map("external_refund_id") // re_... ï¿½ uniqueness = idempotency
   createdAt         DateTime    @default(now()) @map("created_at")
 
   @@index([paymentId])
@@ -656,6 +657,7 @@ model Notification {
 
   @@map("notifications")
 }
+
 
 
 

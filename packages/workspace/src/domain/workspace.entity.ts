@@ -12,6 +12,8 @@ export interface WorkspaceProps {
   id: WorkspaceId;
   name: string;
   slug: string;
+  /** White-label: branding opcional por workspace (nombre visible, logo, color). */
+  branding: Record<string, unknown> | null;
   members: WorkspaceMemberProps[];
   createdAt: Date;
   updatedAt: Date;
@@ -43,6 +45,7 @@ export class Workspace {
       id: params.id,
       name: params.name.trim(),
       slug: `${slugify(params.name)}-${params.id.slice(0, 8)}`,
+      branding: null,
       members: [{ userId: params.ownerId, role: "OWNER", joinedAt: now }],
       createdAt: now,
       updatedAt: now,
@@ -72,6 +75,12 @@ export class Workspace {
   get id() { return this.props.id; }
   get name() { return this.props.name; }
   get slug() { return this.props.slug; }
+  get branding() { return this.props.branding; }
+
+  updateBranding(branding: Record<string, unknown> | null): void {
+    this.props.branding = branding;
+    this.props.updatedAt = new Date();
+  }
   get members() { return [...this.props.members]; }
   get createdAt() { return this.props.createdAt; }
 }

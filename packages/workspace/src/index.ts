@@ -7,7 +7,9 @@ export * from "./application/add-workspace-member.use-case";
 export * from "./application/create-workspace-invitation.use-case";
 export * from "./application/accept-workspace-invitation.use-case";
 export * from "./application/list-my-workspaces.use-case";
+export * from "./application/update-workspace-branding.use-case";
 export * from "./application/assert-workspace-access.use-case";
 export * from "./infrastructure/prisma-workspace.repository";
 export * from "./infrastructure/prisma-workspace-invitation.repository";
 export * from "./infrastructure/prisma-workspace-staff-directory.repository";
+
