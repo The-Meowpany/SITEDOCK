@@ -11,7 +11,7 @@ import {
   RestoreWebsiteBackupUseCase,
 } from "@sitedock/deployment";
 import { GetWebsiteUseCase, PrismaWebsiteRepository } from "@sitedock/website";
-import { AssertWorkspaceAccessUseCase, PrismaWorkspaceRepository } from "@sitedock/workspace";
+import { assertWebsiteAccess } from "../middleware/access-control";
 import { requireSession } from "../middleware/require-session";
 import { auditBestEffort } from "../audit";
 
@@ -20,8 +20,6 @@ import { auditBestEffort } from "../audit";
 const storage = new MockStorageProvider();
 const deployments = new PrismaDeploymentRepository();
 const backups = new PrismaWebsiteBackupRepository();
-const assertWorkspaceAccess = new AssertWorkspaceAccessUseCase(new PrismaWorkspaceRepository());
-
 const getWebsite = new GetWebsiteUseCase(new PrismaWebsiteRepository());
 const listBackups = new ListBackupsUseCase(backups);
 const createBackup = new CreateWebsiteBackupUseCase(deployments, backups, storage);
@@ -36,7 +34,7 @@ backupsRouter.use(requireSession);
 
 backupsRouter.get<WebsiteScopedParams>("/", async (req, res, next) => {
   try {
-    await assertWorkspaceAccess.execute({ workspaceId: req.params.workspaceId, userId: req.userId! });
+    await assertWebsiteAccess({ workspaceId: req.params.workspaceId, userId: req.userId!, websiteId: req.params.websiteId });
     // ListBackupsUseCase never exposes storagePath (internal object-storage layout).
     res.json(await listBackups.execute(req.params.websiteId));
   } catch (err) {
@@ -53,9 +51,10 @@ const createBackupSchema = z.object({ deploymentId: z.string().uuid().optional()
 
 backupsRouter.post<WebsiteScopedParams>("/", async (req, res, next) => {
   try {
-    await assertWorkspaceAccess.execute({
+    await assertWebsiteAccess({
       workspaceId: req.params.workspaceId,
       userId: req.userId!,
+      websiteId: req.params.websiteId,
       requiredRoles: ["OWNER", "ADMIN", "DEVELOPER"],
     });
     const body = createBackupSchema.parse(req.body ?? {});
@@ -107,9 +106,10 @@ backupsRouter.post<WebsiteScopedParams>("/", async (req, res, next) => {
  */
 backupsRouter.post<BackupParams>("/:backupId/restore", async (req, res, next) => {
   try {
-    await assertWorkspaceAccess.execute({
+    await assertWebsiteAccess({
       workspaceId: req.params.workspaceId,
       userId: req.userId!,
+      websiteId: req.params.websiteId,
       requiredRoles: ["OWNER", "ADMIN", "DEVELOPER"],
     });
 
@@ -129,3 +129,4 @@ backupsRouter.post<BackupParams>("/:backupId/restore", async (req, res, next) =>
     next(err);
   }
 });
+

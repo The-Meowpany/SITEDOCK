@@ -13,6 +13,7 @@ import {
 import { GetWebsiteUseCase, PrismaWebsiteRepository, PublishDeploymentToWebsiteUseCase } from "@sitedock/website";
 import { PrismaClientRepository } from "@sitedock/client";
 import { AssertWorkspaceAccessUseCase, PrismaWorkspaceRepository } from "@sitedock/workspace";
+import { assertWebsiteAccess } from "../middleware/access-control";
 import { requireSession } from "../middleware/require-session";
 import { notifyBestEffort } from "../notifications";
 import { auditBestEffort } from "../audit";
@@ -84,7 +85,7 @@ deploymentRouter.post<WebsiteScopedParams>("/", upload.single("file"), async (re
 
 deploymentRouter.get<WebsiteScopedParams>("/", async (req, res, next) => {
   try {
-    await assertWorkspaceAccess.execute({ workspaceId: req.params.workspaceId, userId: req.userId! });
+    await assertWebsiteAccess({ workspaceId: req.params.workspaceId, userId: req.userId!, websiteId: req.params.websiteId });
     res.json(await listDeployments.execute(req.params.websiteId));
   } catch (err) {
     next(err);
@@ -93,7 +94,7 @@ deploymentRouter.get<WebsiteScopedParams>("/", async (req, res, next) => {
 
 deploymentRouter.get<DeploymentParams>("/:deploymentId", async (req, res, next) => {
   try {
-    await assertWorkspaceAccess.execute({ workspaceId: req.params.workspaceId, userId: req.userId! });
+    await assertWebsiteAccess({ workspaceId: req.params.workspaceId, userId: req.userId!, websiteId: req.params.websiteId });
     res.json(await getDeployment.execute(req.params.deploymentId, req.params.websiteId));
   } catch (err) {
     next(err);
@@ -147,6 +148,8 @@ deploymentRouter.post<DeploymentParams>("/:deploymentId/publish", async (req, re
     next(err);
   }
 });
+
+
 
 
 

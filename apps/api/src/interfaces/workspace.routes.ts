@@ -9,6 +9,7 @@ import {
   ListMyWorkspacesUseCase,
   PrismaWorkspaceInvitationRepository,
   PrismaWorkspaceRepository,
+  UpdateWorkspaceBrandingUseCase,
 } from "@sitedock/workspace";
 import { EmailAddress, ConflictError, UserId } from "@sitedock/shared";
 import { PrismaUserRepository } from "@sitedock/auth";
@@ -67,6 +68,29 @@ workspaceRouter.get("/:workspaceId", async (req, res, next) => {
       userId: req.userId!,
     });
     res.json({ id: workspace.id, name: workspace.name, slug: workspace.slug, members: workspace.members });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── White-label branding (Fase 20) ────────────────────────
+
+const brandingSchema = z.object({ branding: z.record(z.any()).nullable() });
+
+workspaceRouter.patch("/branding", async (req: import("express").Request<{ workspaceId: string }>, res, next) => {
+  try {
+    await assertWorkspaceAccess.execute({
+      workspaceId: req.params.workspaceId,
+      userId: req.userId!,
+      requiredRoles: ["OWNER", "ADMIN"],
+    });
+    const body = brandingSchema.parse(req.body);
+    const useCase = new UpdateWorkspaceBrandingUseCase(new PrismaWorkspaceRepository());
+    const result = await useCase.execute({
+      workspaceId: req.params.workspaceId,
+      branding: body.branding,
+    });
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -208,6 +232,7 @@ invitationRouter.post("/:token/accept", async (req, res, next) => {
     next(err);
   }
 });
+
 
 
 
