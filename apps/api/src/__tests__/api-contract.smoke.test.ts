@@ -26,7 +26,7 @@ describe("validateProductionConfig (Fase 19 §7/§8 — fail closed)", () => {
   });
 
   it("stripe pedido sin credenciales produce dos errores explícitos", () => {
-    const errors = validateProductionConfig({ NODE_ENV: "production", PAYMENT_PROVIDER: "stripe", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "" }, true);
+    const errors = validateProductionConfig({ NODE_ENV: "production", PAYMENT_PROVIDER: "stripe", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", DATABASE_URL: "postgresql://x" }, true);
     expect(errors).toHaveLength(2);
   });
 
@@ -77,3 +77,4 @@ describe("HTTP contract smoke (sin BD)", () => {
     expect((await call("GET", "/api/v1/admin/metrics")).status).toBeGreaterThanOrEqual(401);
   });
 });
+

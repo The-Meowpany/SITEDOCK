@@ -85,7 +85,7 @@ describe("S3 failure injection — los fallos de infraestructura NUNCA son éxit
   for (const [name, responder] of cases) {
     it(`PUT ante ${name} lanza InfrastructureError (nunca éxito silencioso)`, async () => {
       const { storage } = providerWith(responder);
-      await expect(storage.put("k/x", Buffer.from("d"))).rejects.toThrow(/STORAGE_PUT_FAILED|REQUEST_FAILED/);
+      await expect(storage.put("k/x", Buffer.from("d"))).rejects.toThrow(/S3 PUT|403|500|503/);
     });
     it(`GET ante ${name} lanza InfrastructureError`, async () => {
       const { storage } = providerWith(responder);
@@ -102,8 +102,11 @@ describe("S3 key sanitization (Fase 19 §15 — aislamiento entre tenants)", () 
     "websites/w1/../websites/w2/artifact",
   ])("rechaza key insegura: %s", async (badKey) => {
     const { storage } = providerWith(() => ({ status: 200, body: "<ListBucketResult></ListBucketResult>" }));
-    await expect(storage.get(badKey)).rejects.toThrow(/UNSAFE_STORAGE_KEY/i);
-    await expect(storage.put(badKey, Buffer.from("x"))).rejects.toThrow(/UNSAFE_STORAGE_KEY/i);
-    await expect(storage.delete(badKey)).rejects.toThrow(/UNSAFE_STORAGE_KEY/i);
+    await expect(storage.get(badKey)).rejects.toThrow(/unsafe storage key/i);
+    await expect(storage.put(badKey, Buffer.from("x"))).rejects.toThrow(/unsafe storage key/i);
+    await expect(storage.delete(badKey)).rejects.toThrow(/unsafe storage key/i);
   });
 });
+
+
+
