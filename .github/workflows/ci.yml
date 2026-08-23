@@ -1,5 +1,10 @@
 name: CI
 
+# Fase 21 §19 — least-privilege: el token GITHUB_TOKEN solo necesita lectura
+# del código para ejecutar lint/typecheck/test/build.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, develop]
@@ -9,9 +14,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Acciones pineadas a SHA inmutables para prevenir supply-chain attacks.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c448fc0a10 # v4.2.0
         with:
           node-version: 20
           cache: npm
@@ -29,8 +35,6 @@ jobs:
         run: npm run typecheck
 
       # Domain tests use in-memory fakes — no database required.
-      # API contract is exercised by the smoke suite (supertest) which also
-      # avoids a live DB by design.
       - name: Unit tests
         run: npm test
 
