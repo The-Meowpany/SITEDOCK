@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+*.log
+.next/
+tsconfig.tsbuildinfo
+packages/database/prisma/generated/
+apps/*/.env.local

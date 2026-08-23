@@ -1,0 +1,72 @@
+/* ─────────────────────────────────────────────────────────────
+   SiteDock Developer Console — sibling of the Client Portal's
+   "Service Passbook" system (apps/web/app/globals.css). Same
+   paper/ink/service-green DNA; denser type and tabular numerals,
+   because this surface is about reading a business at a glance.
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  /* Paper & ink — shared with the portal. */
+  --paper: #eff1ec;
+  --paper-raised: #f7f8f5;
+  --ink: #1b2a22;
+  --ink-soft: #4b5a52;
+  --ink-faint: #8a988f;
+  --line: #d3d8cf;
+  --line-strong: #b7bfb1;
+
+  /* Brand — muted service-green. */
+  --brand: #2e6b57;
+  --brand-soft: #dfe9e3;
+
+  /* Status accents — one per meaningful state family (shared semantics). */
+  --stamp-live: #2e6b57;
+  --stamp-warn: #a85c32; /* PAST_DUE / GRACE_PERIOD / failed payments */
+  --stamp-danger: #9c3b2e; /* SUSPENDED */
+  --stamp-neutral: #6b7268;
+
+  --font-display: ui-serif, Charter, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --radius: 3px;
+  --shadow-card: 0 1px 2px rgba(27, 42, 34, 0.06), 0 8px 24px rgba(27, 42, 34, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(27, 42, 34, 0.035) 1px, transparent 0);
+  background-size: 22px 22px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--brand-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}

@@ -1,0 +1,49 @@
+.receipt {
+  margin: 0;
+}
+
+.line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 15px;
+}
+
+.line:last-child {
+  border-bottom: none;
+}
+
+.line dt {
+  color: var(--ink-soft);
+}
+
+.line dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.amount {
+  font-family: var(--font-display);
+  font-size: 19px;
+}
+
+.perInterval {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.empty {
+  color: var(--ink-faint);
+  font-size: 14px;
+  margin: 0;
+}

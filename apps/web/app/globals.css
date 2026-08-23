@@ -1,0 +1,81 @@
+/* ─────────────────────────────────────────────────────────────
+   SiteDock Client Portal — "Service Passbook" design system.
+   Signature element: the site's status rendered as a stamped ledger
+   entry, echoing the literal WebsiteStatus state machine in
+   packages/website/src/domain/website-status.ts. Everything else on
+   the page stays quiet so that stamp reads as the one true accent.
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  /* Paper & ink — stone-grey ledger paper, not the cliché warm cream. */
+  --paper: #eff1ec;
+  --paper-raised: #f7f8f5;
+  --ink: #1b2a22;
+  --ink-soft: #4b5a52;
+  --ink-faint: #8a988f;
+  --line: #d3d8cf;
+  --line-strong: #b7bfb1;
+
+  /* Brand — muted service-green, the "everything's running" color. */
+  --brand: #2e6b57;
+  --brand-soft: #dfe9e3;
+
+  /* Stamp accents — one per meaningful website state family. */
+  --stamp-live: #2e6b57;
+  --stamp-warn: #a85c32; /* PAST_DUE / GRACE_PERIOD */
+  --stamp-danger: #9c3b2e; /* SUSPENDED */
+  --stamp-neutral: #6b7268; /* DRAFT / PREVIEW / pending states */
+
+  --font-display: ui-serif, Charter, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --radius: 3px;
+  --shadow-card: 0 1px 2px rgba(27, 42, 34, 0.06), 0 8px 24px rgba(27, 42, 34, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(27, 42, 34, 0.035) 1px, transparent 0);
+  background-size: 22px 22px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--brand-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

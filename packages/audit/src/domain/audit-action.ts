@@ -1,0 +1,38 @@
+/**
+ * Audit action catalog (docs/ARCHITECTURE.md §37 "Audit Log" / brief §37).
+ * Kept as a closed string union so every call site is checked at compile time —
+ * a typo in an action name is a type error, not a silent gap in the audit trail.
+ */
+export const AUDIT_ACTIONS = [
+  "USER_LOGIN",
+  "WORKSPACE_CREATED",
+  "CLIENT_CREATED",
+  "CLIENT_INVITED",
+  "INVITATION_ACCEPTED",
+  "WEBSITE_CREATED",
+  "WEBSITE_SUBMITTED_FOR_APPROVAL",
+  "WEBSITE_APPROVED",
+  "DEPLOYMENT_CREATED",
+  "DEPLOYMENT_PUBLISHED",
+  "DEPLOYMENT_ROLLBACK",
+  "PLAN_CREATED",
+  "PLAN_UPDATED",
+  "PROJECT_CHARGE_CREATED",
+  "PROJECT_CHARGE_PAID",
+  "PROJECT_CHARGE_CANCELED",
+  "SUBSCRIPTION_CREATED",
+  "CHECKOUT_CREATED",
+  "PAYMENT_RECEIVED",
+  "PAYMENT_FAILED",
+  "WEBSITE_SUSPENDED",
+  "WEBSITE_REACTIVATED",
+  "DOMAIN_CONNECTED",
+  "DOMAIN_VERIFIED",
+  "BACKUP_CREATED",
+  "BACKUP_RESTORED",
+  "MAINTENANCE_REQUEST_CREATED",
+  "MAINTENANCE_REQUEST_COMPLETED",
+  "ADMIN_ACTION",
+] as const;
+
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];

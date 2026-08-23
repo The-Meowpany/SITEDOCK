@@ -1,0 +1,662 @@
+// SiteDock — Full domain schema.
+// Phase 1 implementation only wires User/Workspace/WorkspaceMember through the
+// application layer; the rest of the model is declared now so migrations don't
+// need destructive reshaping later, per docs/ARCHITECTURE.md section 7.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────── IDENTITY ─────────────────────────
+
+enum PlatformRole {
+  PLATFORM_ADMIN
+  DEVELOPER
+  CLIENT
+}
+
+model User {
+  id             String   @id @default(uuid())
+  email          String   @unique
+  passwordHash   String   @map("password_hash")
+  fullName       String   @map("full_name")
+  platformRole   PlatformRole @default(DEVELOPER) @map("platform_role")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  suspendedAt    DateTime? @map("suspended_at") // set by PLATFORM_ADMIN — blocks login
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  memberships    WorkspaceMember[]
+  sessions       Session[]
+  passwordResets PasswordResetToken[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique @map("token_hash")
+  userAgent String?  @map("user_agent")
+  ipAddress String?  @map("ip_address")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ───────────────────────── WORKSPACE ─────────────────────────
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  DEVELOPER
+  CLIENT
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members            WorkspaceMember[]
+  invitations        WorkspaceInvitation[]
+  clients            Client[]
+  projects           Project[]
+  websites           Website[]
+  servicePlans       ServicePlan[]
+  auditLogs          AuditLog[]
+
+  outboxEvents       OutboxEvent[]
+
+  connectedAccount   ConnectedAccount?
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid())
+  workspaceId String        @map("workspace_id")
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String        @map("user_id")
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        WorkspaceRole
+  invitedAt   DateTime      @default(now()) @map("invited_at")
+  joinedAt    DateTime?     @map("joined_at")
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+enum WorkspaceInvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+model WorkspaceInvitation {
+  id          String                    @id @default(uuid())
+  workspaceId String                    @map("workspace_id")
+  workspace   Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email       String
+  role        WorkspaceRole
+  tokenHash   String                    @unique @map("token_hash")
+  status      WorkspaceInvitationStatus @default(PENDING)
+  invitedById String                    @map("invited_by_id")
+  expiresAt   DateTime                  @map("expires_at")
+  acceptedAt  DateTime?                 @map("accepted_at")
+  createdAt   DateTime                  @default(now()) @map("created_at")
+
+  @@index([workspaceId])
+  @@index([email])
+  @@map("workspace_invitations")
+}
+
+// ───────────────────────── CLIENT MANAGEMENT ─────────────────────────
+
+model Client {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  fullName    String   @map("full_name")
+  email       String
+  userId      String?  @map("user_id") // linked once the client accepts the invite
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  websites    Website[]
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId])
+  @@map("clients")
+}
+
+// ───────────────────────── WEBSITE / PROJECT / DEPLOYMENT ─────────────────────────
+
+model Project {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  websites    Website[]
+
+  @@index([workspaceId])
+  @@map("projects")
+}
+
+enum WebsiteStatus {
+  DRAFT
+  PREVIEW
+  PENDING_APPROVAL
+  APPROVED
+  LIVE
+  PAST_DUE
+  GRACE_PERIOD
+  SUSPENDED
+  ARCHIVED
+  DELETED
+}
+
+model Website {
+  id                  String        @id @default(uuid())
+  workspaceId         String        @map("workspace_id")
+  workspace           Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectId           String        @map("project_id")
+  project             Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clientId            String?       @map("client_id")
+  client              Client?       @relation(fields: [clientId], references: [id])
+  name                String
+  status              WebsiteStatus @default(DRAFT)
+  productionDeploymentId String?    @map("production_deployment_id")
+  subdomain           String        @unique
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  deployments         Deployment[]  @relation("WebsiteDeployments")
+  backups             WebsiteBackup[]
+  domains             Domain[]
+  subscriptions       Subscription[]
+  charges             ProjectCharge[]
+
+  invoices            Invoice[]
+  maintenanceRequests MaintenanceRequest[]
+
+  @@index([workspaceId])
+  @@index([clientId])
+  @@map("websites")
+}
+
+enum DeploymentStatus {
+  QUEUED
+  BUILDING
+  READY
+  PUBLISHED
+  FAILED
+  CANCELED
+}
+
+model Deployment {
+  id           String           @id @default(uuid())
+  websiteId    String           @map("website_id")
+  website      Website          @relation("WebsiteDeployments", fields: [websiteId], references: [id], onDelete: Cascade)
+  version      Int
+  status       DeploymentStatus @default(QUEUED)
+  storagePath  String           @map("storage_path")
+  fileCount    Int?             @map("file_count")
+  sizeBytes    BigInt?          @map("size_bytes")
+  errorMessage String?          @map("error_message")
+  uploadedById String           @map("uploaded_by_id")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  publishedAt  DateTime?        @map("published_at")
+
+  backups WebsiteBackup[]
+
+  @@unique([websiteId, version])
+  @@index([websiteId])
+  @@map("deployments")
+}
+
+enum BackupStatus {
+  READY
+  FAILED
+}
+
+// Immutable copy of one deployment's artifacts. One backup per source
+// deployment (enforced by the unique pair) is what makes the scheduled
+// backup job idempotent. Restores never overwrite anything: they materialize
+// a NEW deployment version from the backup's files.
+model WebsiteBackup {
+  id                 String       @id @default(uuid())
+  websiteId          String       @map("website_id")
+  website            Website      @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  sourceDeploymentId String       @map("source_deployment_id")
+  sourceDeployment   Deployment   @relation(fields: [sourceDeploymentId], references: [id])
+  status             BackupStatus @default(READY)
+  storagePath        String       @unique @map("storage_path")
+  sizeBytes          BigInt?      @map("size_bytes")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  expiresAt          DateTime     @map("expires_at") // retention policy materialized — cleanup job deletes past this
+
+  @@unique([websiteId, sourceDeploymentId])
+  @@index([expiresAt])
+  @@index([websiteId])
+  @@map("website_backups")
+}
+
+// ───────────────────────── DOMAIN MANAGEMENT ─────────────────────────
+
+enum DomainStatus {
+  PENDING
+  VERIFYING
+  VERIFIED
+  FAILED
+}
+
+model Domain {
+  id                  String       @id @default(uuid())
+  websiteId           String       @map("website_id")
+  website             Website      @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  hostname            String       @unique
+  status              DomainStatus @default(PENDING)
+  ownershipProofToken String?      @map("ownership_proof_token")
+  sslIssuedAt         DateTime?    @map("ssl_issued_at")
+  sslExpiresAt        DateTime?    @map("ssl_expires_at") // from DomainProvider.issueCertificate — drives the auto-renewal job
+  verifiedAt          DateTime?    @map("verified_at")
+  createdAt           DateTime     @default(now()) @map("created_at")
+
+  @@index([websiteId])
+  @@index([sslExpiresAt])
+  @@map("domains")
+}
+
+// ───────────────────────── BILLING ─────────────────────────
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+// Two commercial product lines ride on the same ServicePlan/Subscription
+// machinery: HOSTING = hosting + infrastructure for one website;
+// MAINTENANCE = recurring membership covering modifications/requests, with an
+// optional monthly request quota (`includedRequestQuota`, NULL = unlimited).
+enum PlanKind {
+  HOSTING
+  MAINTENANCE
+}
+
+model ServicePlan {
+  id              String          @id @default(uuid())
+  workspaceId     String          @map("workspace_id")
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name            String
+  kind            PlanKind        @default(HOSTING)
+  priceCents      Int             @map("price_cents")
+  currency        String          @default("USD")
+  billingInterval BillingInterval @map("billing_interval")
+  // MAINTENANCE only: modification requests included per billing period. NULL = unlimited.
+  includedRequestQuota Int?       @map("included_request_quota")
+  features        Json
+  active          Boolean         @default(true)
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  subscriptions   Subscription[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, kind])
+  @@map("service_plans")
+}
+
+enum SubscriptionStatus {
+  INCOMPLETE
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  GRACE_PERIOD
+  SUSPENDED
+  CANCELED
+  EXPIRED
+}
+
+model Subscription {
+  id                     String             @id @default(uuid())
+  websiteId              String             @map("website_id")
+  website                Website            @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  kind                   PlanKind           @default(HOSTING) // denormalized from plan at creation — a website can hold one HOSTING + one MAINTENANCE subscription
+  planId                 String             @map("plan_id")
+  plan                   ServicePlan        @relation(fields: [planId], references: [id])
+  status                 SubscriptionStatus @default(INCOMPLETE)
+  priceCents             Int                @map("price_cents")
+  currency               String
+  billingInterval        BillingInterval    @map("billing_interval")
+  startDate              DateTime?          @map("start_date")
+  nextBillingDate        DateTime?          @map("next_billing_date")
+  trialEnd               DateTime?          @map("trial_end")
+  gracePeriodEndsAt      DateTime?          @map("grace_period_ends_at")
+  cancellationDate       DateTime?          @map("cancellation_date")
+  paymentProvider        String             @map("payment_provider")
+  externalSubscriptionId String?            @map("external_subscription_id")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+
+  invoices               Invoice[]
+  events                 SubscriptionEvent[]
+
+  // One HOSTING + one MAINTENANCE membership per website — the tiers ride here.
+  @@unique([websiteId, kind])
+  @@index([kind])
+  @@map("subscriptions")
+}
+
+model SubscriptionEvent {
+  id             String   @id @default(uuid())
+  subscriptionId String   @map("subscription_id")
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  type           String
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([subscriptionId])
+  @@map("subscription_events")
+}
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  FAILED
+  VOID
+}
+
+// SUBSCRIPTION invoices belong to a recurring membership; ONE_TIME invoices
+// record project fees (creation/initial deploy) charged outside any
+// subscription � exactly one of subscriptionId/websiteId is set per kind.
+enum InvoiceKind {
+  SUBSCRIPTION
+  ONE_TIME
+}
+
+model Invoice {
+  id             String        @id @default(uuid())
+  kind           InvoiceKind   @default(SUBSCRIPTION)
+  subscriptionId String?       @map("subscription_id")
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  websiteId      String?       @map("website_id")
+  website        Website?      @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  amountCents    Int           @map("amount_cents")
+  currency       String
+  status         InvoiceStatus @default(OPEN)
+  dueDate        DateTime      @map("due_date")
+  paidAt         DateTime?     @map("paid_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  payments       Payment[]
+
+  @@index([subscriptionId])
+  @@index([websiteId])
+  @@map("invoices")
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  invoiceId         String        @map("invoice_id")
+  invoice           Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amountCents       Int           @map("amount_cents")
+  currency          String
+  status            PaymentStatus @default(PENDING)
+  provider          String
+  externalPaymentId String?       @map("external_payment_id")
+  platformFeeCents  Int           @default(0) @map("platform_fee_cents")
+  // Fase 16 � reconciliaci�n contra Stripe: ancla al balance transaction oficial.
+  externalBalanceTxnId String?    @map("external_balance_txn_id")
+  refundedCents     Int           @default(0) @map("refunded_cents")
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  events            PaymentEvent[]
+  refunds           Refund[]
+  disputes          Dispute[]
+
+  @@index([invoiceId])
+  @@index([externalBalanceTxnId])
+  @@map("payments")
+}
+
+// ------------------------- MONEY MOVEMENTS (Fase 16) -------------------------
+
+enum ConnectedAccountStatus {
+  PENDING_ONBOARDING
+  ACTIVE
+  RESTRICTED
+  DISCONNECTED
+}
+
+// One merchant (freelancer workspace) ? one Stripe Connect Express account.
+// KYC/KYB is delegated entirely to Stripe; SiteDock only tracks state.
+model ConnectedAccount {
+  id                 String                 @id @default(uuid())
+  workspaceId        String                 @unique @map("workspace_id")
+  workspace          Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider           String                 @default("stripe")
+  externalAccountId  String                 @unique @map("external_account_id") // acct_...
+  status             ConnectedAccountStatus @default(PENDING_ONBOARDING)
+  chargesEnabled     Boolean                @default(false)
+  payoutsEnabled     Boolean                @default(false)
+  onboardedAt        DateTime?              @map("onboarded_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+
+  @@map("connected_accounts")
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+model Refund {
+  id                String      @id @default(uuid())
+  paymentId         String      @map("payment_id")
+  payment           Payment     @relation(fields: [paymentId], references: [id])
+  amountCents       Int         @map("amount_cents")
+  currency          String
+  reason            String?
+  status            RefundStatus @default(PENDING)
+  externalRefundId  String?     @unique @map("external_refund_id") // re_... � uniqueness = idempotency
+  createdAt         DateTime    @default(now()) @map("created_at")
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+enum DisputeStatus {
+  OPEN
+  WON
+  LOST
+}
+
+model Dispute {
+  id                String        @id @default(uuid())
+  paymentId         String        @map("payment_id")
+  payment           Payment       @relation(fields: [paymentId], references: [id])
+  externalDisputeId String        @unique @map("external_dispute_id") // dp_...
+  amountCents       Int           @map("amount_cents")
+  currency          String
+  status            DisputeStatus @default(OPEN)
+  evidenceDueBy     DateTime?     @map("evidence_due_by")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  closedAt          DateTime?     @map("closed_at")
+
+  @@index([paymentId])
+  @@map("disputes")
+}
+
+model PaymentEvent {
+  id              String   @id @default(uuid())
+  paymentId       String?  @map("payment_id")
+  payment         Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  provider        String
+  externalEventId String   @map("external_event_id")
+  eventType       String   @map("event_type")
+  payloadHash     String   @map("payload_hash")
+  processingStatus String  @default("RECEIVED") @map("processing_status")
+  receivedAt      DateTime @default(now()) @map("received_at")
+
+  @@unique([provider, externalEventId])
+  @@map("payment_events")
+}
+
+enum ProjectChargeStatus {
+  PENDING
+  PAID
+  CANCELED
+}
+
+// One-time commercial charge (e.g. the creation/initial-deploy project fee) —
+// deliberately separate from subscriptions: pay once for the build, then a
+// recurring membership for maintenance. The provider echoes externalCheckoutId
+// back on the webhook so PAID is only ever set from a verified event.
+model ProjectCharge {
+  id                 String              @id @default(uuid())
+  workspaceId        String              @map("workspace_id")
+  websiteId          String              @map("website_id")
+  website            Website             @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  title              String
+  amountCents        Int                 @map("amount_cents")
+  currency           String
+  status             ProjectChargeStatus @default(PENDING)
+  provider           String
+  externalCheckoutId String?             @map("external_checkout_id")
+  paidAt             DateTime?           @map("paid_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+
+  @@index([workspaceId])
+  @@index([websiteId])
+  @@map("project_charges")
+}
+
+// ───────────────────────── MAINTENANCE ─────────────────────────
+
+enum MaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CLIENT
+  PENDING_PAYMENT
+  PAID
+  COMPLETED
+  APPROVED
+  CANCELED
+}
+
+model MaintenanceRequest {
+  id          String            @id @default(uuid())
+  websiteId   String            @map("website_id")
+  website     Website           @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  status      MaintenanceStatus @default(OPEN)
+  priceCents  Int?              @map("price_cents")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  comments    MaintenanceComment[]
+
+  @@index([websiteId])
+  @@map("maintenance_requests")
+}
+
+model MaintenanceComment {
+  id                   String              @id @default(uuid())
+  maintenanceRequestId String              @map("maintenance_request_id")
+  request              MaintenanceRequest  @relation(fields: [maintenanceRequestId], references: [id], onDelete: Cascade)
+  authorId             String              @map("author_id")
+  body                 String
+  createdAt            DateTime            @default(now()) @map("created_at")
+
+  @@index([maintenanceRequestId])
+  @@map("maintenance_comments")
+}
+
+// ───────────────────────── AUDIT / OUTBOX / NOTIFICATIONS ─────────────────────────
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  workspaceId String?  @map("workspace_id")
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id])
+  actorId     String?  @map("actor_id")
+  actor       User?    @relation(fields: [actorId], references: [id])
+  action      String
+  resourceType String  @map("resource_type")
+  resourceId  String?  @map("resource_id")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid())
+  workspaceId String?   @map("workspace_id")
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id])
+  eventType   String    @map("event_type")
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  publishedAt DateTime? @map("published_at")
+  attempts    Int       @default(0)
+
+  @@index([publishedAt])
+  @@map("outbox_events")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  recipient String
+  type      String
+  payload   Json
+  sentAt    DateTime? @map("sent_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+
+
+
+
+

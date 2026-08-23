@@ -1,0 +1,11 @@
+.page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+}
+
+.hint {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}

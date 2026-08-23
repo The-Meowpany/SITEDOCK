@@ -1,0 +1,21 @@
+{
+  "name": "@sitedock/deployment",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sitedock/shared": "*",
+    "@sitedock/database": "*",
+    "yauzl": "^3.1.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@types/yauzl": "^2.10.3"
+  }
+}
