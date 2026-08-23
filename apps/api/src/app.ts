@@ -33,6 +33,14 @@ import { adminRouter } from "./interfaces/admin.routes";
 export function createApp() {
   const app = express();
 
+  // Fase 23 §11 — trust proxy: cuando la API corre detrás de un reverse proxy
+  // (Caddy/Nginx), Express debe confiar en X-Forwarded-For para que
+  // express-rate-limit identifique la IP real del cliente y no la IP del proxy.
+  // En producción esto SIEMPRE está activo porque el TLS lo maneja el proxy.
+  if (config.isProduction || process.env.TRUST_PROXY === "true") {
+    app.set("trust proxy", true);
+  }
+
   /** Correlation id for every request — used by pino-http and error responses. */
   function assignRequestId(req: Request, _res: Response, next: NextFunction) {
     req.requestId = randomUUID();

@@ -15,7 +15,6 @@ import {
 import { config } from "../config";
 import { authRateLimiter } from "../middleware/rate-limit";
 import { requireSession } from "../middleware/require-session";
-import { logger } from "../logger";
 import { notifyBestEffort } from "../notifications";
 import { auditBestEffort } from "../audit";
 
@@ -92,11 +91,11 @@ authRouter.post("/password-reset/request", authRateLimiter, async (req, res, nex
   try {
     const { email } = z.object({ email: z.string().email() }).parse(req.body);
     const result = await requestPasswordReset.execute(email);
-    // In production this dispatches via NotificationService (EmailProvider port).
-    // Never return the raw token in the response; logged only in non-production demo mode.
-    if (result && !config.isProduction) {
-      logger.info({ demoResetToken: result.rawToken }, "Password reset requested (demo mode)");
-    }
+    // NEVER log the raw token — even in development. The token is a secret
+    // that grants password reset. In demo mode, the developer can inspect
+    // the NotificationService output or use the MockEmailProvider's sent
+    // emails to retrieve the link.
+    void result; // result.rawToken is consumed by NotificationService only
     res.status(202).json({ message: "If that email exists, a reset link has been sent." });
   } catch (err) {
     next(err);
@@ -124,4 +123,5 @@ authRouter.get("/me", requireSession, async (req, res, next) => {
     next(err);
   }
 });
+
 
