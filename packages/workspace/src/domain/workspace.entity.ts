@@ -28,6 +28,84 @@ function slugify(name: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+// ── Branding validation (Fase 21 §6/§8) ──────────────────
+
+const BRANDING_MAX_KEYS = 20;
+const BRANDING_MAX_STRING_LENGTH = 500;
+export const SAFE_URL_RE = /^https:\/\//;
+export const SAFE_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+export const DANGEROUS_PATTERNS = [
+  /<script/i,
+  /<iframe/i,
+  /<object/i,
+  /<embed/i,
+  /on\w+\s*=/i, // event handlers (onclick=, onerror=, ...)
+  /javascript:/i,
+  /data:text\/html/i,
+];
+
+function validateBranding(branding: Record<string, unknown>): void {
+  const keys = Object.keys(branding);
+  if (keys.length > BRANDING_MAX_KEYS) {
+    throw new DomainError(
+      `Branding exceeds ${BRANDING_MAX_KEYS} keys`,
+      "BRANDING_TOO_MANY_KEYS"
+    );
+  }
+
+  for (const key of keys) {
+    if (key.length > 50) {
+      throw new DomainError(`Branding key "${key}" too long`, "BRANDING_KEY_TOO_LONG");
+    }
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+      throw new DomainError(`Invalid branding key "${key}"`, "INVALID_BRANDING_KEY");
+    }
+
+    const value = branding[key];
+    if (value === null || value === undefined) continue;
+
+    if (typeof value === "string") {
+      if (value.length > BRANDING_MAX_STRING_LENGTH) {
+        throw new DomainError(
+          `Branding value for "${key}" exceeds ${BRANDING_MAX_STRING_LENGTH} chars`,
+          "BRANDING_VALUE_TOO_LONG"
+        );
+      }
+      for (const pattern of DANGEROUS_PATTERNS) {
+        if (pattern.test(value)) {
+          throw new DomainError(
+            `Branding value for "${key}" contains unsafe content`,
+            "UNSAFE_BRANDING_CONTENT"
+          );
+        }
+      }
+      // URL fields must use HTTPS
+      if (/url$/i.test(key) && !SAFE_URL_RE.test(value)) {
+        throw new DomainError(
+          `Branding URL "${key}" must use https://`,
+          "UNSAFE_BRANDING_URL"
+        );
+      }
+      // Color fields must be valid hex
+      if (/color$/i.test(key) && typeof value === "string" && value.length > 1) {
+        if (!SAFE_COLOR_RE.test(value)) {
+          throw new DomainError(
+            `Branding color "${key}" must be a valid hex color`,
+            "INVALID_BRANDING_COLOR"
+          );
+        }
+      }
+    } else if (typeof value === "number" || typeof value === "boolean") {
+      continue; // primitives are safe
+    } else if (typeof value === "object") {
+      throw new DomainError(
+        `Branding value for "${key}" cannot be a nested object`,
+        "BRANDING_NESTED_OBJECT"
+      );
+    }
+  }
+}
+
 /**
  * Workspace aggregate. Protects tenancy invariants: a workspace always has
  * exactly one OWNER at creation, and membership changes go through the
@@ -78,9 +156,13 @@ export class Workspace {
   get branding() { return this.props.branding; }
 
   updateBranding(branding: Record<string, unknown> | null): void {
+    if (branding !== null) {
+      validateBranding(branding);
+    }
     this.props.branding = branding;
     this.props.updatedAt = new Date();
   }
   get members() { return [...this.props.members]; }
   get createdAt() { return this.props.createdAt; }
 }
+
