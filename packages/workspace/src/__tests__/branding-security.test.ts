@@ -18,8 +18,10 @@ function tryBranding(branding: Record<string, unknown> | null) {
   ws.updateBranding(branding);
 }
 
-describe("Branding validation (Fase 21 §6/§8)", () => {
-  it("accepts safe branding values", () => {
+// ── Safe values ──────────────────────────────────────────
+
+describe("Branding validation — safe values", () => {
+  it("accepts safe branding", () => {
     tryBranding({
       name: "Studio XYZ",
       primaryColor: "#2e6b57",
@@ -38,6 +40,17 @@ describe("Branding validation (Fase 21 §6/§8)", () => {
     expect(ws.branding).toBeNull();
   });
 
+  it("accepts valid HTTPS URLs and hex colors", () => {
+    tryBranding({
+      logoUrl: "https://cdn.example.com/logo.png",
+      primaryColor: "#2e6b57",
+    });
+  });
+});
+
+// ── XSS / injection ─────────────────────────────────────
+
+describe("Branding validation — XSS/injection rejection", () => {
   const xssPayloads = [
     '<script>alert("xss")</script>',
     "<img onerror=alert(1) src=x>",
@@ -50,7 +63,7 @@ describe("Branding validation (Fase 21 §6/§8)", () => {
   ];
 
   for (const payload of xssPayloads) {
-    it(`rejects XSS in value: ${payload.slice(0, 40)}`, () => {
+    it(`rejects XSS: ${payload.slice(0, 40)}`, () => {
       expect(() => tryBranding({ tagline: payload })).toThrow(DomainError);
       expect(() => tryBranding({ name: payload })).toThrow(DomainError);
     });
@@ -65,20 +78,48 @@ describe("Branding validation (Fase 21 §6/§8)", () => {
     expect(() => tryBranding({ logoUrl: "javascript:void(0)" })).toThrow();
   });
 
-  it("accepts valid HTTPS logo URLs", () => {
-    expect(() => tryBranding({ logoUrl: "https://cdn.example.com/logo.png" })).not.toThrow();
+  it("rejects invalid colors", () => {
+    expect(() => tryBranding({ primaryColor: "not-a-color" })).toThrow(/hex color/i);
   });
 
-  it("rejects invalid colors and accepts valid hex", () => {
-    expect(() => tryBranding({ primaryColor: "not-a-color" })).toThrow(/hex color/i);
+  it("accepts valid hex colors", () => {
     expect(() => tryBranding({ primaryColor: "#2e6b57" })).not.toThrow();
   });
 
   it("rejects nested objects as injection vectors", () => {
     expect(() => tryBranding({ nested: { inner: "payload" } })).toThrow(/nested object/i);
   });
+});
 
-  it("rejects oversized values", () => {
+// ── Prototype pollution (Fase 24) ────────────────────────
+
+describe("Prototype pollution prevention", () => {
+  it("rejects __proto__ arriving via JSON.parse (HTTP body)", () => {
+    // JSON.parse SÍ crea __proto__ como propiedad propia (a diferencia del literal).
+    const malicious = JSON.parse('{"__proto__": {"isAdmin": true}, "name": "safe"}');
+    expect(() => tryBranding(malicious)).toThrow(DomainError);
+  });
+
+  it("rejects constructor as branding key", () => {
+    const payload = JSON.parse('{"constructor": "exploit"}');
+    expect(() => tryBranding(payload)).toThrow(DomainError);
+  });
+
+  it("rejects hasOwnProperty as branding key", () => {
+    expect(() => tryBranding({ hasOwnProperty: true })).toThrow(DomainError);
+  });
+
+  it("does not pollute Object.prototype after storing branding", () => {
+    tryBranding({ safeKey: "safeValue" });
+    expect(({} as Record<string, unknown>).isAdmin).toBeUndefined();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+});
+
+// ── Structural attacks ───────────────────────────────────
+
+describe("Branding structural attacks", () => {
+  it("rejects oversized string values", () => {
     expect(() => tryBranding({ tagline: "x".repeat(501) })).toThrow(/exceeds/i);
   });
 
@@ -89,7 +130,7 @@ describe("Branding validation (Fase 21 §6/§8)", () => {
   });
 
   it("rejects invalid key names", () => {
-    expect(() => tryBranding({ "bad key": "value" })).toThrow(/Invalid branding key/i);
+    expect(() => tryBranding({ "bad key with spaces": "value" })).toThrow(/Invalid branding key/i);
     expect(() => tryBranding({ "": "value" })).toThrow(/Invalid branding key/i);
   });
 });

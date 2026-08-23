@@ -39,10 +39,20 @@ export const DANGEROUS_PATTERNS = [
   /<iframe/i,
   /<object/i,
   /<embed/i,
-  /on\w+\s*=/i, // event handlers (onclick=, onerror=, ...)
+  /on\w+\s*=/i,
   /javascript:/i,
   /data:text\/html/i,
 ];
+
+/** Keys que permiten prototype pollution si se almacenan en un objeto JS. */
+const FORBIDDEN_BRANDING_KEYS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+  "hasOwnProperty",
+  "toString",
+  "valueOf",
+]);
 
 function validateBranding(branding: Record<string, unknown>): void {
   const keys = Object.keys(branding);
@@ -59,6 +69,12 @@ function validateBranding(branding: Record<string, unknown>): void {
     }
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
       throw new DomainError(`Invalid branding key "${key}"`, "INVALID_BRANDING_KEY");
+    }
+    if (FORBIDDEN_BRANDING_KEYS.has(key)) {
+      throw new DomainError(
+        `Branding key "${key}" is forbidden (prototype pollution vector)`,
+        "FORBIDDEN_BRANDING_KEY"
+      );
     }
 
     const value = branding[key];
@@ -165,4 +181,5 @@ export class Workspace {
   get members() { return [...this.props.members]; }
   get createdAt() { return this.props.createdAt; }
 }
+
 

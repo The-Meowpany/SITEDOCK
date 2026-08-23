@@ -75,7 +75,13 @@ workspaceRouter.get("/:workspaceId", async (req, res, next) => {
 
 // ── White-label branding (Fase 20) ────────────────────────
 
-const brandingSchema = z.object({ branding: z.record(z.any()).nullable() });
+const brandingSchema = z.object({
+  branding: z.record(
+    z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, "Key must be alphanumeric/underscore")
+      .refine((k) => !["__proto__", "constructor", "prototype"].includes(k), "Forbidden key"),
+    z.union([z.string().max(500), z.number(), z.boolean()])
+  ).nullable()
+});
 
 workspaceRouter.patch("/branding", async (req: import("express").Request<{ workspaceId: string }>, res, next) => {
   try {
@@ -232,6 +238,7 @@ invitationRouter.post("/:token/accept", async (req, res, next) => {
     next(err);
   }
 });
+
 
 
 
