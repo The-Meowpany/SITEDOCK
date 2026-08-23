@@ -2,31 +2,31 @@
 
 **Recurring Website Infrastructure for Freelancers.**
 
-SiteDock convierte un proyecto web de pago unico en un servicio mensual: el
+SiteDock convierte un proyecto web de pago único en un servicio mensual: el
 freelancer desarrolla el sitio una vez y la plataforma gestiona hosting,
 deployment, dominios, SSL, backups, clientes, suscripciones y cobros
 recurrentes.
 
-No es "otro hosting". Es la infraestructura tecnica **y financiera** para que
+No es "otro hosting". Es la infraestructura técnica **y financiera** para que
 un desarrollador convierta un proyecto en ingreso recurrente.
 
 ## Arquitectura
 
-Modular Monolith + Async Workers (DDD tactico, Clean/Hexagonal por bounded
+Modular Monolith + Async Workers (DDD táctico, Clean/Hexagonal por bounded
 context). Un backend Express, tres frontends Next.js 15, PostgreSQL,
 Stripe Connect, S3, Resend.
 
 ```
-Internet -> Reverse Proxy/TLS -> API (:4000)
-                                  |- PostgreSQL
-                                  |- Stripe (pagos + Connect)
-                                  |- S3 (deployments + backups)
-                                  |- Resend (emails)
-                                  `- Workers (jobs programados)
+Internet → Reverse Proxy/TLS → API (:4000)
+                                  ├── PostgreSQL
+                                  ├── Stripe (pagos + Connect)
+                                  ├── S3 (deployments + backups)
+                                  ├── Resend (emails)
+                                  └── Workers (jobs programados)
 
-Dashboard Developer (:3001) --+
-Portal Cliente (:3000) -------+-- consumen API REST v1
-Admin Console (:3002) --------+
+Dashboard Developer (:3001) ──┐
+Portal Cliente (:3000) ────────┤── consumen API REST v1
+Admin Console (:3002) ─────────┘
 ```
 
 ## Capacidades principales
@@ -34,23 +34,23 @@ Admin Console (:3002) --------+
 - Multi-tenant con aislamiento estructural (workspace/client/website)
 - Deployments versionados e inmutables con rollback
 - Suscripciones recurrentes con tiers de mantenimiento customizables
-- Cobros unicos por proyecto separados de la membresia mensual
-- Backups con verificacion de integridad SHA-256
-- Renovacion automatica de certificados SSL
+- Cobros únicos por proyecto separados de la membresía mensual
+- Backups con verificación de integridad SHA-256
+- Renovación automática de certificados SSL
 - Solicitudes de mantenimiento con cuota por tier
 - Stripe Connect para pagos reales del freelancer
-- Audit log append-only de acciones criticas
+- Audit log append-only de acciones críticas
 
 ## Stack
 
-| Capa | Tecnologia |
+| Capa | Tecnología |
 |------|-----------|
-| Backend | Node 20 - TypeScript - Express |
-| Base de datos | PostgreSQL 16 - Prisma ORM |
-| Frontend | Next.js 15 - React 18 - CSS Modules |
-| Pagos | Stripe (Connect Express) - Mock provider para demo |
-| Storage | S3-compatible - Mock provider para demo |
-| Email | Resend - Mock provider para demo |
+| Backend | Node 20 · TypeScript · Express |
+| Base de datos | PostgreSQL 16 · Prisma ORM |
+| Frontend | Next.js 15 · React 18 · CSS Modules |
+| Pagos | Stripe (Connect Express) · Mock provider para demo |
+| Storage | S3-compatible · Mock provider para demo |
+| Email | Resend · Mock provider para demo |
 | Testing | Vitest (250+ tests de dominio con fakes en memoria) |
 | CI | GitHub Actions |
 | Linting | ESLint 9 flat config |
@@ -76,7 +76,7 @@ npm run e2e                   # Flujo completo E2E contra stack local
 ## Testing
 
 ```bash
-npm test                      # 311 tests de dominio (fakes en memoria, sin BD)
+npm test                      # 336 tests de dominio (fakes en memoria, sin BD)
 npm run lint                  # ESLint 9 flat config
 npm run typecheck             # TypeScript strict en 16 workspaces
 ```
@@ -87,12 +87,12 @@ Ver [SECURITY.md](docs/SECURITY.md), [THREAT_MODEL.md](docs/THREAT_MODEL.md),
 [AUTHORIZATION_MATRIX.md](docs/AUTHORIZATION_MATRIX.md),
 [MULTI_TENANT_SECURITY_MODEL.md](docs/MULTI_TENANT_SECURITY_MODEL.md).
 
-## Estado de verificacion
+## Estado de verificación
 
 | Nivel | Estado | Evidencia |
 |-------|--------|-----------|
-| Development | VERIFIED | 311 tests · lint 0 · typecheck 0 · builds OK |
-| Security | VERIFIED | 88+ tests de seguridad · audit estatica limpia |
+| Development | VERIFIED | 336 tests · lint 0 · typecheck 0 · builds OK |
+| Security | VERIFIED | 88+ tests de seguridad · H1-H5 corregidos con regresión |
 | PostgreSQL E2E | NOT VERIFIED | Requiere Postgres real |
 | Docker build | NOT VERIFIED | Requiere Docker daemon |
 | Stripe sandbox | IMPLEMENTED | Requiere credenciales sandbox |
@@ -105,4 +105,4 @@ Ver [SECURITY.md](docs/SECURITY.md), [THREAT_MODEL.md](docs/THREAT_MODEL.md),
 - Sin PostgreSQL real en este entorno: los repositorios Prisma nunca han
   sido ejecutados contra una base real.
 - Providers reales implementados pero no verificados contra servicios live.
-- White-label: branding basico implementado; dominios custom pendientes.
+- White-label: branding básico implementado; dominios custom pendientes.
