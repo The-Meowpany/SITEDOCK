@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import { InfrastructureError } from "@sitedock/shared";
+import { InfrastructureError, withProviderMetrics } from "@sitedock/shared";
 import { StorageProvider } from "../domain/ports";
 
 export interface S3StorageProviderConfig {
@@ -48,6 +48,21 @@ export class S3StorageProvider implements StorageProvider {
   }
 
   // ── Firma SigV4 ─────────────────────────────────────────
+
+  /**
+   * Fase 19 §15/§23 — defense in depth: los keys se construyen internamente
+   * con ids UUID, pero si algún día un input externo llega aquí, el path
+   * traversal y el escape de prefijo quedan bloqueados.
+   */
+  private sanitizeKey(key: string): string {
+    if (!key || key.startsWith("/") || key.includes("//") || key.split("/").includes("..")) {
+      throw new InfrastructureError(
+        `Unsafe storage key: "${key}"`,
+        "UNSAFE_STORAGE_KEY"
+      );
+    }
+    return key;
+  }
 
   private signRequest(method: "GET" | "PUT" | "DELETE", key: string, body?: Buffer): HeadersInit & Record<string, string> {
     const url = new URL(this.endpointFor(key));
@@ -98,10 +113,12 @@ export class S3StorageProvider implements StorageProvider {
   private async do(method: "GET" | "PUT" | "DELETE", key: string, body?: Buffer): Promise<Response> {
     const headers = this.signRequest(method, key, body);
     try {
-      return await (this.config.fetchImpl ?? fetch)(this.endpointFor(key), {
-        method,
-        headers,
-        body: body ? new Uint8Array(body) : undefined,
+      return await withProviderMetrics({ provider: "s3", operation: method }, async () => {
+        return await (this.config.fetchImpl ?? fetch)(this.endpointFor(key), {
+          method,
+          headers,
+          body: body ? new Uint8Array(body) : undefined,
+        });
       });
     } catch (err) {
       throw new InfrastructureError(
@@ -114,7 +131,8 @@ export class S3StorageProvider implements StorageProvider {
   // ── Port StorageProvider ────────────────────────────────
 
   async put(path: string, content: Buffer): Promise<void> {
-    const res = await this.do("PUT", path, content);
+    const key = this.sanitizeKey(path);
+    const res = await this.do("PUT", key, content);
     if (!res.ok) {
       throw new InfrastructureError(
         `S3 PUT ${path} → ${res.status}`,
@@ -124,7 +142,8 @@ export class S3StorageProvider implements StorageProvider {
   }
 
   async get(path: string): Promise<Buffer> {
-    const res = await this.do("GET", path);
+    const key = this.sanitizeKey(path);
+    const res = await this.do("GET", key);
     if (!res.ok) {
       throw new InfrastructureError(
         `S3 GET ${path} → ${res.status}${res.status === 404 ? " (no existe)" : ""}`,
@@ -135,7 +154,8 @@ export class S3StorageProvider implements StorageProvider {
   }
 
   async delete(path: string): Promise<void> {
-    const res = await this.do("DELETE", path);
+    const key = this.sanitizeKey(path);
+    const res = await this.do("DELETE", key);
     // DELETE es idempotente en S3: 204 o 404 son éxito.
     if (!res.ok && res.status !== 404) {
       throw new InfrastructureError(`S3 DELETE ${path} → ${res.status}`, "STORAGE_DELETE_FAILED");
@@ -143,7 +163,8 @@ export class S3StorageProvider implements StorageProvider {
   }
 
   async exists(path: string): Promise<boolean> {
-    const res = await this.do("HEAD" as "GET", path);
+    const key = this.sanitizeKey(path);
+    const res = await this.do("HEAD" as "GET", key);
     return res.ok;
   }
 
@@ -215,3 +236,6 @@ export class S3StorageProvider implements StorageProvider {
     };
   }
 }
+
+
+

@@ -129,6 +129,17 @@ Implementado hasta ahora:
 - ✅ 10 tests nuevos offline (firma presente con formato AWS4 correcto, flows put/get/delete/list contra fake S3, mapping de errores Resend)
 - ⬜ Verificación live de ambos providers (requiere credenciales reales — la lógica ya está cubierta offline)
 
+**Fase 19 — Production Provider Verification & Operational Hardening**
+- ✅ **Fail-closed de producción** — `validateProductionConfig()` centralizada: PAYMENT_PROVIDER=stripe sin credenciales, STORAGE_PROVIDER=s3 sin bucket, EMAIL_PROVIDER=resend sin API key → **exit(1) al arrancar**, nunca fallback silencioso a mocks
+- ✅ **Métricas de providers** — `providerMetrics` en `@sitedock/shared`: contadores success/failure/timeout/rate_limited + latencia acumulada por provider:operación; cableado en Stripe HTTP client, S3 y Resend; endpoint `GET /api/v1/admin/metrics` (PLATFORM_ADMIN)
+- ✅ **Backoff exponencial con jitter** — `exponentialBackoffWithJitter()` acotado con RNG inyectable (tests deterministas); `StripeRateLimitError` con retryAfterMs del header Retry-After de Stripe
+- ✅ **Idempotencia keys** — checkout sessions de Stripe envían `Idempotency-Key: checkout:{subscriptionId|chargeId}` → respuesta perdida + retry = misma sesión, nunca segundo cobro
+- ✅ **Validación económica** — webhook payment.succeeded valida monto Y moneda contra el precio capturado de la suscripción antes de mutar (divergencia = excepción explícita, jamás silencio)
+- ✅ **Integridad de backups** — SHA-256 del contenido ordenado persistido al crear backup; restore verifica hash ANTES de desplegar (backup corrupto = BACKUP_INTEGRITY_FAILED, nunca deployment corrupto)
+- ✅ **S3 key sanitization** — path traversal (`../`, `//`, `/raíz`) bloqueado en put/get/delete/exists; tests de aislamiento entre tenants a nivel storage
+- ✅ **S3 failure injection** — 403/500/503 en PUT/GET lanzan InfrastructureError tipado (nunca éxito silencioso); XML malformado no produce keys fantasma
+- ✅ **10 smoke tests HTTP** contra `createApp()` real sin BD: health checks, 401 fail-closed, gating demo, webhook firma inválida, CORS/rate-limit headers, admin metrics auth
+
 Común a todas las fases:
 - ✅ API REST completa cableando los 12 bounded contexts, siempre a través de `AssertWorkspaceAccessUseCase`
 - ✅ Schema completo de base de datos (todo el modelo de dominio, incluyendo `ownershipProofToken` para verificación de dominios y la tabla `workspace_invitations`)

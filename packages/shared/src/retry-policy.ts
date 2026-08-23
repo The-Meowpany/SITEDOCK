@@ -36,6 +36,24 @@ export class RetryPolicy {
   }
 }
 
+/**
+ * Backoff exponencial acotado con jitter (Fase 19 §18): nunca retry inmediato
+ * en loop, nunca crecimiento sin techo. RNG inyectable para tests
+ * deterministas. Devuelve SIEMPRE >= 1ms para que un sleep(0) no genere
+ * retry-storms.
+ */
+export function exponentialBackoffWithJitter(
+  attemptNumber: number,
+  options: { baseMs?: number; maxMs?: number; rng?: () => number } = {}
+): number {
+  const baseMs = options.baseMs ?? 500;
+  const maxMs = options.maxMs ?? 30_000;
+  const rng = options.rng ?? Math.random;
+  const exponential = Math.min(baseMs * 2 ** Math.max(0, attemptNumber - 1), maxMs);
+  const jittered = Math.round(exponential / 2 + rng() * (exponential / 2));
+  return Math.max(1, jittered);
+}
+
 export interface RetryResult<T> {
   succeeded: boolean;
   attempts: number;
@@ -72,3 +90,4 @@ export async function runWithRetry<T>(fn: () => Promise<T>, policy: RetryPolicy)
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+

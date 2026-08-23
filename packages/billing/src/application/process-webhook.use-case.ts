@@ -79,6 +79,19 @@ export class ProcessPaymentWebhookUseCase {
 
       switch (event.type) {
         case "payment.succeeded": {
+          // Fase 19 §3 — validación económica: el evento confirmado debe coincidir
+          // con el precio capturado al suscribir. Una divergencia indica desync de
+          // plan o manipulación → excepción explícita, jamás mutación silenciosa.
+          if (
+            event.amountCents !== subscription.price.amountCents ||
+            event.currency !== subscription.price.currency
+          ) {
+            throw new ApplicationError(
+              `Payment amount mismatch for subscription ${subscription.id}: expected ${subscription.price.toDecimalString()} ${subscription.price.currency}, got ${event.amountCents} ${event.currency}`,
+              "SUBSCRIPTION_AMOUNT_MISMATCH"
+            );
+          }
+
           if (subscription.status === "ACTIVE") subscription.renew();
           else subscription.activate();
 

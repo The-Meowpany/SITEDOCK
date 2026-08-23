@@ -9,6 +9,7 @@ type BackupRow = {
   sourceDeploymentId: string;
   status: string;
   storagePath: string;
+  integritySha256: string | null;
   sizeBytes: bigint | null;
   createdAt: Date;
   expiresAt: Date;
@@ -22,6 +23,8 @@ function toDomain(row: BackupRow): WebsiteBackup {
     status: row.status as WebsiteBackup["status"],
     storagePath: row.storagePath,
     sizeBytes: row.sizeBytes === null ? null : Number(row.sizeBytes),
+
+    integritySha256: row.integritySha256,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
   });
@@ -71,6 +74,7 @@ export class PrismaWebsiteBackupRepository implements WebsiteBackupRepository {
         sourceDeploymentId: backup.sourceDeploymentId,
         status: backup.status,
         storagePath: backup.storagePath,
+        integritySha256: backup.integritySha256,
         sizeBytes: backup.sizeBytes,
         expiresAt: backup.expiresAt,
       },
@@ -85,3 +89,6 @@ export class PrismaWebsiteBackupRepository implements WebsiteBackupRepository {
     await prisma.websiteBackup.delete({ where: { id: backupId } });
   }
 }
+
+
+

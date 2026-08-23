@@ -1,3 +1,5 @@
+import { withProviderMetrics } from "@sitedock/shared";
+
 /**
  * Cliente HTTP mínimo para la API REST de Stripe (ADR-006).
  *
@@ -7,6 +9,13 @@
  * - se testea offline con `fetchImpl` inyectado;
  * - evita una dependencia pesada hasta que el volumen de endpoints lo justifique.
  * Si la superficie crece, se reemplaza por el SDK sin tocar puertos ni dominio.
+ *
+ * Fase 19 (hardening):
+ * - `Idempotency-Key` soportado en POST — garantiza UN efecto económico por clave
+ *   aunque la respuesta se pierda y el cliente reintente.
+ * - 429 → StripeRateLimitError con retryAfterMs del header Retry-After
+ *   (los callers NUNCA deben reintentar inmediatamente).
+ * - Métricas por operación (outcome + latencia) vía @sitedock/shared.
  */
 
 export type StripeHttpMethod = "GET" | "POST";
@@ -22,10 +31,23 @@ export class StripeApiError extends Error {
   }
 }
 
+/** 429 con Retry-After — los callers deben esperar; nunca retry inmediato. */
+export class StripeRateLimitError extends Error {
+  constructor(public readonly retryAfterMs: number | null) {
+    super("Stripe rate limit exceeded");
+    this.name = "StripeRateLimitError";
+  }
+}
+
 export interface StripeHttpClientOptions {
   secretKey: string;
   apiBase?: string; // default: https://api.stripe.com — override para tests/sandbox proxies
   fetchImpl?: typeof fetch; // inyectable para tests offline
+}
+
+export interface StripePostOptions {
+  idempotencyKey?: string;
+  headers?: Record<string, string>;
 }
 
 /** Aplana objetos anidados a notación de corchetes de Stripe: price_data[currency]=usd */
@@ -63,43 +85,59 @@ export class StripeHttpClient {
     params?: Record<string, unknown>,
     headers: Record<string, string> = {}
   ): Promise<T> {
-    const url =
-      method === "GET" && params
-        ? `${this.base}${path}?${new URLSearchParams(flattenStripeParams(params))}`
-        : `${this.base}${path}`;
+    const operation = `${method} ${path}`;
+    return withProviderMetrics({ provider: "stripe", operation }, async () => {
+      const url =
+        method === "GET" && params
+          ? `${this.base}${path}?${new URLSearchParams(flattenStripeParams(params))}`
+          : `${this.base}${path}`;
 
-    const res = await this.doFetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.options.secretKey}`,
-        ...(method === "POST"
-          ? { "Content-Type": "application/x-www-form-urlencoded" }
-          : {}),
-        ...headers,
-      },
-      body: method === "POST" && params ? new URLSearchParams(flattenStripeParams(params)).toString() : undefined,
+      const res = await this.doFetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.options.secretKey}`,
+          ...(method === "POST"
+            ? { "Content-Type": "application/x-www-form-urlencoded" }
+            : {}),
+          ...headers,
+        },
+        body: method === "POST" && params ? new URLSearchParams(flattenStripeParams(params)).toString() : undefined,
+      });
+
+      const json = (await res.json().catch(() => null)) as
+        | T & { error?: { message?: string; code?: string } }
+        | null;
+
+      if (res.status === 429) {
+        const retryAfterHeader = res.headers.get("retry-after");
+        const retryAfterMs =
+          retryAfterHeader && Number.isFinite(Number(retryAfterHeader))
+            ? Number(retryAfterHeader) * 1000
+            : null;
+        throw new StripeRateLimitError(retryAfterMs);
+      }
+
+      if (!res.ok) {
+        throw new StripeApiError(
+          res.status,
+          json?.error?.code ?? null,
+          json?.error?.message ?? `Stripe request failed with status ${res.status}`
+        );
+      }
+
+      return json as T;
     });
-
-    const json = (await res.json().catch(() => null)) as
-      | T & { error?: { message?: string; code?: string } }
-      | null;
-
-    if (!res.ok) {
-      throw new StripeApiError(
-        res.status,
-        json?.error?.code ?? null,
-        json?.error?.message ?? `Stripe request failed with status ${res.status}`
-      );
-    }
-
-    return json as T;
   }
 
-  post<T>(path: string, params?: Record<string, unknown>, headers?: Record<string, string>) {
-    return this.request<T>("POST", path, params, headers);
+  post<T>(path: string, params?: Record<string, unknown>, options?: StripePostOptions) {
+    return this.request<T>("POST", path, params, {
+      ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+      ...options?.headers,
+    });
   }
 
   get<T>(path: string, query?: Record<string, unknown>, headers?: Record<string, string>) {
     return this.request<T>("GET", path, query, headers);
   }
 }
+

@@ -72,24 +72,30 @@ export class StripePaymentProvider implements PaymentProvider {
     successUrl: string;
     cancelUrl: string;
   }): Promise<CheckoutSession> {
-    const session = await this.http.post<StripeCheckoutSession>("/checkout/sessions", {
-      mode: "subscription",
-      success_url: params.successUrl,
-      cancel_url: params.cancelUrl,
-      client_reference_id: params.subscriptionId,
-      metadata: { subscription_id: params.subscriptionId },
-      subscription_data: { metadata: { subscription_id: params.subscriptionId } },
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: params.amount.currency,
-            unit_amount: params.amount.amountCents,
-            recurring: { interval: params.billingInterval === "MONTHLY" ? "month" : "year" },
+    const session = await this.http.post<StripeCheckoutSession>(
+      "/checkout/sessions",
+      {
+        mode: "subscription",
+        success_url: params.successUrl,
+        cancel_url: params.cancelUrl,
+        client_reference_id: params.subscriptionId,
+        metadata: { subscription_id: params.subscriptionId },
+        subscription_data: { metadata: { subscription_id: params.subscriptionId } },
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: params.amount.currency,
+              unit_amount: params.amount.amountCents,
+              recurring: { interval: params.billingInterval === "MONTHLY" ? "month" : "year" },
+            },
           },
-        },
-      ],
-    });
+        ],
+      },
+      // Idempotencia end-to-end (Fase 19 §7): reintentar la creación tras una
+      // respuesta perdida produce LA MISMA sesión, nunca un segundo cobro.
+      { idempotencyKey: `checkout:subscription:${params.subscriptionId}` }
+    );
     return { id: session.id, url: session.url ?? "", status: "OPEN" };
   }
 
@@ -100,23 +106,27 @@ export class StripePaymentProvider implements PaymentProvider {
     successUrl: string;
     cancelUrl: string;
   }): Promise<CheckoutSession> {
-    const session = await this.http.post<StripeCheckoutSession>("/checkout/sessions", {
-      mode: "payment",
-      success_url: params.successUrl,
-      cancel_url: params.cancelUrl,
-      client_reference_id: params.chargeId,
-      metadata: { charge_id: params.chargeId },
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: params.amount.currency,
-            unit_amount: params.amount.amountCents,
-            product_data: { name: params.description },
+    const session = await this.http.post<StripeCheckoutSession>(
+      "/checkout/sessions",
+      {
+        mode: "payment",
+        success_url: params.successUrl,
+        cancel_url: params.cancelUrl,
+        client_reference_id: params.chargeId,
+        metadata: { charge_id: params.chargeId },
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: params.amount.currency,
+              unit_amount: params.amount.amountCents,
+              product_data: { name: params.description },
+            },
           },
-        },
-      ],
-    });
+        ],
+      },
+      { idempotencyKey: `checkout:charge:${params.chargeId}` }
+    );
     return { id: session.id, url: session.url ?? "", status: "OPEN" };
   }
 
@@ -222,4 +232,5 @@ export class StripePaymentProvider implements PaymentProvider {
     }
   }
 }
+
 

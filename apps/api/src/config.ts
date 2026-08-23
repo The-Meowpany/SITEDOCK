@@ -1,4 +1,41 @@
-/** Typed configuration. Business logic never reads process.env directly. */
+/**
+ * Typed configuration. Business logic never reads process.env directly.
+ */
+
+/** Fase 19 §7/§8 — validación centralizada: en producción una configuración
+ * de provider PEDIDA pero incompleta es un fallo de arranque, nunca un
+ * fallback silencioso a mocks. Pura e inyectable → testeable. Devuelve la
+ * lista de errores (vacía = OK).
+ */
+export function validateProductionConfig(
+  env: NodeJS.ProcessEnv,
+  isProduction: boolean
+): string[] {
+  if (!isProduction) return [];
+  const errors: string[] = [];
+
+  if (!env.DATABASE_URL) errors.push("DATABASE_URL is required in production");
+
+  if (env.PAYMENT_PROVIDER === "stripe") {
+    if (!env.STRIPE_SECRET_KEY) errors.push("PAYMENT_PROVIDER=stripe requires STRIPE_SECRET_KEY");
+    if (!env.STRIPE_WEBHOOK_SECRET)
+      errors.push("PAYMENT_PROVIDER=stripe requires STRIPE_WEBHOOK_SECRET");
+  }
+
+  if (env.STORAGE_PROVIDER === "s3") {
+    for (const key of ["S3_BUCKET", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const) {
+      if (!env[key]) errors.push(`STORAGE_PROVIDER=s3 requires ${key}`);
+    }
+  }
+
+  if (env.EMAIL_PROVIDER === "resend") {
+    if (!env.RESEND_API_KEY) errors.push("EMAIL_PROVIDER=resend requires RESEND_API_KEY");
+    if (!env.RESEND_FROM) errors.push("EMAIL_PROVIDER=resend requires RESEND_FROM");
+  }
+
+  return errors;
+}
+
 export const config = {
   env: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT ?? 4000),
@@ -15,4 +52,6 @@ export const config = {
     process.env.NODE_ENV !== "production" && process.env.DEMO_MODE !== "false",
   /** Platform revenue-share percentage applied to every successful payment (brief §8). */
   platformFeePercentage: Number(process.env.PLATFORM_FEE_PERCENTAGE ?? 10),
+
+  validateProductionConfig,
 };

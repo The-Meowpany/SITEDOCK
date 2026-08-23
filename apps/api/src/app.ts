@@ -22,6 +22,7 @@ import {
   refundsRouter,
   reconciliationRouter,
 } from "./interfaces/merchant.routes";
+import { metricsAdminRouter } from "./interfaces/metrics-admin.routes";
 import { servicePlanRouter, subscriptionRouter, demoPaymentRouter, paymentWebhookRouter } from "./interfaces/billing.routes";
 import { maintenanceRouter } from "./interfaces/maintenance.routes";
 import { domainsRouter } from "./interfaces/domains.routes";
@@ -94,6 +95,7 @@ export function createApp() {
   app.use("/api/v1/workspaces/:workspaceId/merchant", merchantRouter);
   app.use("/api/v1/workspaces/:workspaceId/payments", refundsRouter);
   app.use("/api/v1/admin/reconciliation", reconciliationRouter);
+  app.use("/api/v1/admin/metrics", metricsAdminRouter);
   app.use("/api/v1/admin", adminRouter);
 
   app.use(notFoundHandler);

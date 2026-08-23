@@ -212,6 +212,40 @@ describe("RestoreWebsiteBackupUseCase", () => {
   });
 });
 
+describe("Backup integrity (Fase 19 �14)", () => {
+  it("restore verifica el hash y rechaza un backup corrupto", async () => {
+    const { storage, deployments, backups } = await seedWorld();
+    const create = new CreateWebsiteBackupUseCase(deployments, backups, storage);
+    const { backupId } = await create.execute({ websiteId: WEBSITE, sourceDeploymentId: DEP_V1, sourceStoragePath: DEP_SOURCE_PATH });
+
+    // Corrupci�n silenciosa: alguien modifica UN archivo dentro del backup.
+    await storage.put(`websites/${WEBSITE}/backups/${backupId}/index.html`, Buffer.from("<html>HACKED</html>"));
+
+    const restore = new RestoreWebsiteBackupUseCase(backups, deployments, storage);
+    await expect(restore.execute({ websiteId: WEBSITE, backupId })).rejects.toThrow(/integrity check failed/i);
+
+    // Ning�n deployment corrupto fue creado.
+    expect(deployments.store.size).toBe(1);
+  });
+
+  it("un backup sin hash (legacy) se restaura sin bloqueo", async () => {
+    const { storage, deployments, backups } = await seedWorld();
+    const orphan = WebsiteBackup.create({
+      id: "bk-legacy",
+      websiteId: WEBSITE,
+      sourceDeploymentId: DEP_V1,
+      storagePath: `websites/${WEBSITE}/backups/bk-legacy`,
+      retentionDays: 30,
+    });
+    backups.store.set("bk-legacy", orphan);
+    await storage.put(`websites/${WEBSITE}/backups/bk-legacy/index.html`, Buffer.from("old"));
+
+    const restore = new RestoreWebsiteBackupUseCase(backups, deployments, storage);
+    const result = await restore.execute({ websiteId: WEBSITE, backupId: "bk-legacy" });
+    expect(result.deploymentId).toBeTruthy();
+  });
+});
+
 describe("CleanupExpiredBackupsUseCase", () => {
   it("deletes storage objects and rows for expired backups only", async () => {
     const { storage, backups } = await seedWorld();
@@ -248,4 +282,5 @@ describe("CleanupExpiredBackupsUseCase", () => {
     expect(await storage.exists(`websites/${WEBSITE}/backups/fresh-bk/index.html`)).toBe(true);
   });
 });
+
 

@@ -260,6 +260,8 @@ model WebsiteBackup {
   sourceDeployment   Deployment   @relation(fields: [sourceDeploymentId], references: [id])
   status             BackupStatus @default(READY)
   storagePath        String       @unique @map("storage_path")
+  // SHA-256 del contenido concatenado (keys ordenadas) — verificado antes de restaurar.
+  integritySha256    String?      @map("integrity_sha256")
   sizeBytes          BigInt?      @map("size_bytes")
   createdAt          DateTime     @default(now()) @map("created_at")
   expiresAt          DateTime     @map("expires_at") // retention policy materialized â€” cleanup job deletes past this
@@ -654,6 +656,7 @@ model Notification {
 
   @@map("notifications")
 }
+
 
 
 

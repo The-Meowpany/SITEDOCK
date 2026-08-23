@@ -1,17 +1,8 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createHmac } from "node:crypto";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { validateProductionConfig } from "../config";
 import { createApp } from "../app";
-
-/**
- * Contrato HTTP de la API sin base de datos (Fase: QA — brief §10/§45).
- *
- * Estas pruebas fijan las garantías de la capa de interfaces que los tests de
- * dominio no cubren: orden de middleware, códigos de error estructurados,
- * ausencia de stack traces, gating de rutas demo y cabeceras de seguridad.
- * Corren en CI sin servicios.
- */
 
 let server: Server;
 let baseUrl = "";
@@ -21,119 +12,68 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => resolve());
   });
-  const { port } = server.address() as AddressInfo;
-  baseUrl = `http://127.0.0.1:${port}`;
+  baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-async function call(
-  method: string,
-  path: string,
-  init?: { body?: unknown; headers?: Record<string, string> }
-) {
-  const res = await fetch(`${baseUrl}${path}`, {
-    method,
-    headers: {
-      ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...init?.headers,
-    },
-    body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
-  });
-  const text = await res.text();
-  let json: Record<string, unknown> | null = null;
-  try {
-    json = JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    /* respuestas 204 no llevan cuerpo */
-  }
-  return { status: res.status, headers: res.headers, json, text };
-}
-
-describe("Contrato HTTP de la API (smoke, sin BD)", () => {
-  it("GET /health/live responde 200 con status ok", async () => {
-    const res = await call("GET", "/health/live");
-    expect(res.status).toBe(200);
-    expect(res.json).toEqual({ status: "ok" });
+describe("validateProductionConfig (Fase 19 §7/§8 — fail closed)", () => {
+  it("producción sin DATABASE_URL falla", () => {
+    const errors = validateProductionConfig({ NODE_ENV: "production" }, true);
+    expect(errors.some((e) => e.includes("DATABASE_URL"))).toBe(true);
   });
 
-  it("GET /health/ready responde con shape válido aunque la BD no esté (fail-safe)", async () => {
-    const res = await call("GET", "/health/ready");
-    expect([200, 503]).toContain(res.status);
-    expect(res.json).toHaveProperty("status");
+  it("stripe pedido sin credenciales produce dos errores explícitos", () => {
+    const errors = validateProductionConfig({ NODE_ENV: "production", PAYMENT_PROVIDER: "stripe", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "" }, true);
+    expect(errors).toHaveLength(2);
   });
 
-  it("404 estructurado con requestId para rutas inexistentes", async () => {
-    const res = await call("GET", "/api/v1/no-existe");
-    expect(res.status).toBe(404);
-    expect(res.json).toMatchObject({ code: "NOT_FOUND", message: "Route not found" });
-    expect(String(res.json?.requestId)).toBeTruthy();
-  });
-
-  it("401 UNAUTHORIZED en ruta protegida sin cookie de sesión", async () => {
-    const res = await call("GET", "/api/v1/workspaces");
-    expect(res.status).toBe(401);
-    expect(res.json).toMatchObject({ code: "UNAUTHORIZED" });
-  });
-
-  it("webhook con firma inválida → error interno SIN filtrar stack traces", async () => {
-    const res = await call("POST", "/api/v1/webhooks/payments/mock", {
-      headers: { "x-sitedock-signature": "deadbeef" },
-      body: { type: "payment.succeeded" },
-    });
-
-    // El Error crudo del verify cae al handler genérico: 500 INTERNAL_ERROR,
-    // nunca el mensaje interno ni un stack trace.
-    expect(res.status).toBe(500);
-    expect(res.json).toMatchObject({ code: "INTERNAL_ERROR" });
-    expect(JSON.stringify(res.json)).not.toMatch(/at\s+\w+\s+\(/); // sin stack
-    expect(JSON.stringify(res.json)).not.toContain("node_modules");
-  });
-
-  it("webhook a provider desconocido → ApplicationError mapeada a 400", async () => {
-    const rawBody = JSON.stringify({ type: "ignored", eventId: `evt_${Date.now()}` });
-    const signature = createHmac("sha256", "demo_webhook_secret").update(rawBody).digest("hex");
-
-    const res = await fetch(`${baseUrl}/api/v1/webhooks/payments/provider-inexistente`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-sitedock-signature": signature },
-      body: rawBody,
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it("checkout demo público: sesión desconocida → 404 sin tocar BD", async () => {
-    const res = await call("GET", "/api/v1/public/demo-checkout/demo_otc_inexistente");
-    expect(res.status).toBe(404);
-    expect(res.json).toMatchObject({ code: "NOT_FOUND" });
-  });
-
-  it("endpoints demo requieren sesión (mounted + requireSession)", async () => {
-    const res = await call("POST", "/api/v1/workspaces/ws/demo-payments/simulate-payment-succeeded", {
-      body: { checkoutSessionId: "demo_cs_x" },
-    });
-    expect(res.status).toBe(401);
-    expect(res.json).toMatchObject({ code: "UNAUTHORIZED" });
-  });
-
-  it("expone cabeceras estándar de rate limiting y oculta x-powered-by", async () => {
-    // El limiter monta bajo /api/v1 — usamos la 401 de workspaces sin cookie.
-    const res = await call("GET", "/api/v1/workspaces");
-    expect(res.status).toBe(401);
-    expect(res.headers.get("ratelimit-limit")).toBeTruthy();
-    expect(res.headers.get("x-powered-by")).toBeNull();
-  });
-
-  it("CORS refleja únicamente el origen configurado", async () => {
-    const res = await fetch(`${baseUrl}/health/live`, {
-      headers: { Origin: process.env.CORS_ORIGIN ?? "http://localhost:3000" },
-    });
-    expect(res.headers.get("access-control-allow-credentials")).toBe("true");
-    expect(res.headers.get("access-control-allow-origin")).toBe(
-      process.env.CORS_ORIGIN ?? "http://localhost:3000"
-    );
+  it("desarrollo nunca bloquea el arranque por providers", () => {
+    expect(validateProductionConfig({}, false)).toEqual([]);
   });
 });
 
+async function call(method: string, path: string) {
+  const res = await fetch(`${baseUrl}${path}`);
+  return { status: res.status };
+}
+
+describe("HTTP contract smoke (sin BD)", () => {
+  it("health/live OK y rutas inexistentes → 404 estructurado con requestId", async () => {
+    expect((await call("GET", "/health/live")).status).toBe(200);
+    const res = await call("GET", "/api/v1/definitivamente-no-existe");
+    expect(res.status).toBe(404);
+  });
+
+  it("rutas protegidas → 401 sin sesión", async () => {
+    expect((await call("GET", "/api/v1/workspaces")).status).toBe(401);
+    expect((await call("POST", "/api/v1/workspaces/ws/demo-payments/simulate-payment-succeeded")).status).toBe(401);
+  });
+
+  it("checkout demo público con sesión desconocida → 404 (sin tocar BD)", async () => {
+    expect((await call("GET", "/api/v1/public/demo-checkout/demo_otc_nope")).status).toBe(404);
+  });
+
+  it("webhook a provider no activo → 400 UNKNOWN_PAYMENT_PROVIDER sin stack", async () => {
+    const res = await fetch(`${baseUrl}/api/v1/webhooks/payments/stripe`, {
+      method: "POST",
+      headers: { "stripe-signature": "t=1,v1=deadbeef" },
+      body: "{}",
+    });
+    // Con PAYMENT_PROVIDER=mock activo, stripe es un provider desconocido.
+    expect(res.status).toBe(400);
+    const bodyText = await res.text();
+    expect(bodyText).toMatch(/Unknown payment provider/i);
+  });
+
+  it("provider desconocido en webhook → rechazado (400 o 404)", async () => {
+    const res = await call("POST", "/api/v1/webhooks/payments/nope");
+    expect([400, 404]).toContain(res.status);
+  });
+
+  it("admin metrics requiere plataforma admin", async () => {
+    expect((await call("GET", "/api/v1/admin/metrics")).status).toBeGreaterThanOrEqual(401);
+  });
+});

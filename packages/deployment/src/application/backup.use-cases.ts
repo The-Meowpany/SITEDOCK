@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ApplicationError, NotFoundError, WebsiteId } from "@sitedock/shared";
 import { Deployment } from "../domain/deployment.entity";
 import { WebsiteBackup } from "../domain/backup.entity";
@@ -82,6 +82,13 @@ export class CreateWebsiteBackupUseCase {
     for (const path of await this.storage.list(fullPath)) {
       totalBytes += (await this.storage.get(path)).length;
     }
+    const paths = [...(await this.storage.list(fullPath))].sort();
+    const hasher = createHash("sha256");
+    for (const p of paths) {
+      hasher.update(p);
+      hasher.update(await this.storage.get(p));
+    }
+    backup.recordIntegrity(hasher.digest("hex"));
     backup.recordSize(totalBytes);
 
     await this.backups.save(backup);
@@ -126,10 +133,27 @@ export class RestoreWebsiteBackupUseCase {
     const deploymentId = randomUUID();
     const destPath = `websites/${params.websiteId}/deployments/${deploymentId}`;
 
-    const files = await this.storage.list(backup.storagePath);
+    const files = (await this.storage.list(backup.storagePath)).sort();
     if (files.length === 0) {
       throw new ApplicationError(`Backup artifacts missing at "${backup.storagePath}"`, "BACKUP_ARTIFACTS_MISSING");
     }
+
+    // Fase 19 §14 — verificación de integridad ANTES de restaurar:
+    // un backup corrupto jamás se convierte en deployment.
+    if (backup.integritySha256) {
+      const hasher = createHash("sha256");
+      for (const path of files) {
+        hasher.update(path);
+        hasher.update(await this.storage.get(path));
+      }
+      if (hasher.digest("hex") !== backup.integritySha256) {
+        throw new ApplicationError(
+          `Backup integrity check failed for "${backup.id}" — refusing to restore`,
+          "BACKUP_INTEGRITY_FAILED"
+        );
+      }
+    }
+
     let totalBytes = 0;
     let fileCount = 0;
     for (const path of files) {
@@ -185,4 +209,6 @@ export class CleanupExpiredBackupsUseCase {
     }
   }
 }
+
+
 

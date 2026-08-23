@@ -9,6 +9,7 @@ export interface WebsiteBackupProps {
   status: BackupStatus;
   storagePath: string;
   sizeBytes: number | null;
+  integritySha256: string | null;
   createdAt: Date;
   /** Retention policy materialized — the cleanup job deletes past this. */
   expiresAt: Date;
@@ -43,6 +44,7 @@ export class WebsiteBackup {
       status: "READY",
       storagePath: params.storagePath,
       sizeBytes: null,
+      integritySha256: null,
       createdAt: now,
       expiresAt,
     });
@@ -66,12 +68,22 @@ export class WebsiteBackup {
     this.props.sizeBytes = sizeBytes;
   }
 
+  recordIntegrity(sha256: string): void {
+    if (!/^[a-f0-9]{64}$/.test(sha256)) {
+      throw new DomainError("Invalid integrity hash", "INVALID_BACKUP_INTEGRITY");
+    }
+    this.props.integritySha256 = sha256;
+  }
+
   get id() { return this.props.id; }
   get websiteId() { return this.props.websiteId; }
   get sourceDeploymentId() { return this.props.sourceDeploymentId; }
   get status() { return this.props.status; }
   get storagePath() { return this.props.storagePath; }
   get sizeBytes() { return this.props.sizeBytes; }
+  get integritySha256() { return this.props.integritySha256; }
   get createdAt() { return this.props.createdAt; }
   get expiresAt() { return this.props.expiresAt; }
 }
+
+
