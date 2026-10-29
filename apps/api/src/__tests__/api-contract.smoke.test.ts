@@ -3,6 +3,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { validateProductionConfig } from "../config";
 import { createApp } from "../app";
+import { workspaceRouter } from "../interfaces/workspace.routes";
 
 let server: Server;
 let baseUrl = "";
@@ -41,6 +42,14 @@ async function call(method: string, path: string) {
 }
 
 describe("HTTP contract smoke (sin BD)", () => {
+  it("workspace branding route is addressed by workspace id", () => {
+    // requireSession answers 401 for every path under /workspaces, so only the
+    // route table can prove PATCH /workspaces/:workspaceId/branding exists.
+    const routes = (workspaceRouter.stack as Array<{ route?: { path: string; methods: Record<string, boolean> } }>)
+      .filter((layer) => layer.route?.methods.patch)
+      .map((layer) => layer.route!.path);
+    expect(routes).toContain("/:workspaceId/branding");
+  });
   it("health/live OK y rutas inexistentes → 404 estructurado con requestId", async () => {
     expect((await call("GET", "/health/live")).status).toBe(200);
     const res = await call("GET", "/api/v1/definitivamente-no-existe");

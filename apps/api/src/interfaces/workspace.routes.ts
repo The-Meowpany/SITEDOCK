@@ -67,7 +67,7 @@ workspaceRouter.get("/:workspaceId", async (req, res, next) => {
       workspaceId: req.params.workspaceId,
       userId: req.userId!,
     });
-    res.json({ id: workspace.id, name: workspace.name, slug: workspace.slug, members: workspace.members });
+    res.json({ id: workspace.id, name: workspace.name, slug: workspace.slug, branding: workspace.branding, members: workspace.members });
   } catch (err) {
     next(err);
   }
@@ -83,7 +83,7 @@ const brandingSchema = z.object({
   ).nullable()
 });
 
-workspaceRouter.patch("/branding", async (req: import("express").Request<{ workspaceId: string }>, res, next) => {
+workspaceRouter.patch("/:workspaceId/branding", async (req: import("express").Request<{ workspaceId: string }>, res, next) => {
   try {
     await assertWorkspaceAccess.execute({
       workspaceId: req.params.workspaceId,
