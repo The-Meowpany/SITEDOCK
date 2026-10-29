@@ -17,6 +17,7 @@ export interface ProcessedWebhookResult {
   duplicate: boolean;
   websiteId?: string;
   subscriptionStatus?: string;
+  subscriptionKind?: string;
 }
 
 /**
@@ -171,7 +172,7 @@ export class ProcessPaymentWebhookUseCase {
 
       await this.webhookEvents.recordProcessed(provider, event.eventId, event.type, payloadHash);
 
-      return { duplicate: false, websiteId: subscription.websiteId, subscriptionStatus: subscription.status };
+      return { duplicate: false, websiteId: subscription.websiteId, subscriptionStatus: subscription.status, subscriptionKind: subscription.kind };
     } catch (err) {
       // Release the claim so the provider's retry isn't treated as a duplicate.
       await this.webhookEvents.releaseEvent(provider, event.eventId).catch(() => {});

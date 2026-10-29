@@ -8,6 +8,8 @@
  *   B  static website: upload -> approve -> publish -> served by Host header
  *   C  update -> changed response -> rollback
  *   D  custom domain: register -> verify -> Host routing -> Caddy TLS ask
+ *   E  billing (mock provider): plan activation, duplicate refusal, failed payment,
+ *      recovery, signed-webhook cancellation and resubscription
  *   F  backup -> integrity-checked restore as new version -> publish -> served;
  *      tampered backup refused
  *   G  platform admin: non-admin refused, admin inspects and suspends a site
@@ -17,8 +19,10 @@
  * run's admin account and corrupting this run's own backup object.
  *
  * Requirements: API on API_URL with DATABASE_URL, STORAGE_PROVIDER=disk,
- * STORAGE_DIR, TLS_ASK_SECRET and DOMAIN_PROVIDER=mock (never a live provider).
+ * STORAGE_DIR, TLS_ASK_SECRET, DOMAIN_PROVIDER=mock and PAYMENT_PROVIDER=mock
+ * (never a live provider).
  */
+import { createHmac } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -34,6 +38,25 @@ const results = [];
 if (process.env.DOMAIN_PROVIDER && process.env.DOMAIN_PROVIDER !== "mock") {
   console.error("refusing to run: DOMAIN_PROVIDER must be mock (no live DNS changes)");
   process.exit(2);
+}
+if (process.env.PAYMENT_PROVIDER && process.env.PAYMENT_PROVIDER !== "mock") {
+  console.error("refusing to run: PAYMENT_PROVIDER must be mock (no real charges)");
+  process.exit(2);
+}
+// Fixed demo secret of MockPaymentProvider (packages/billing); not a real credential.
+const MOCK_WEBHOOK_SECRET = "demo_webhook_secret";
+
+async function paymentWebhook(event, signature) {
+  const raw = Buffer.from(JSON.stringify(event));
+  const res = await fetch(`${API_V1}/webhooks/payments/mock`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-sitedock-signature": signature ?? createHmac("sha256", MOCK_WEBHOOK_SECRET).update(raw).digest("hex"),
+    },
+    body: raw,
+  });
+  return { status: res.status, json: await res.json().catch(() => null) };
 }
 
 function record(journey, name, ok, detail = {}) {
@@ -337,6 +360,118 @@ async function main() {
   );
   const foreignDomain = await outsider.call("POST", `${sitePath}/domains`, { hostname: `x-${runId}.example.test` });
   record("D", "non-member cannot attach a domain", [403, 404].includes(foreignDomain.status), { status: foreignDomain.status });
+
+  // ── E: subscription + entitlements (mock payment provider) ───────────────
+  const eSite = await owner.must("POST", `/workspaces/${workspaceId}/websites`, { projectId, name: `Journey Billing ${runId}` }, [201]);
+  const eHost = `${eSite.subdomain}.${BASE_DOMAIN}`;
+  const ePath = `/workspaces/${workspaceId}/websites/${eSite.websiteId}`;
+  const ev1 = await upload(owner, workspaceId, eSite.websiteId, `<h1>journey ${runId} billing</h1>`);
+  await owner.must("POST", `${ePath}/submit-for-approval`);
+  await owner.must("POST", `${ePath}/approve`);
+  await owner.must("POST", `${ePath}/deployments/${ev1.deploymentId}/publish`);
+  const plan = (kind, extra = {}) =>
+    owner.must("POST", `/workspaces/${workspaceId}/plans`, {
+      name: `Journey ${kind} ${runId}`,
+      kind,
+      priceDecimal: "29.00",
+      currency: "USD",
+      billingInterval: "MONTHLY",
+      ...extra,
+    }, [201]);
+  const hostingPlan = await plan("HOSTING");
+  const maintenancePlan = await plan("MAINTENANCE", { includedRequestQuota: 1 });
+  const subscription = (kind = "HOSTING") => owner.must("GET", `${ePath}/subscription?kind=${kind}`);
+  const checkout = async (kind = "HOSTING") => {
+    const sub = await subscription(kind);
+    const co = await owner.must("POST", `${ePath}/subscription/${sub.id}/checkout`, {}, [201]);
+    return String(co.checkoutUrl).split("/").pop();
+  };
+  const siteStatus = async () => (await owner.must("GET", ePath)).status;
+
+  await owner.must("POST", `${ePath}/subscription`, { planId: hostingPlan.planId }, [201]);
+  const duplicate = await owner.call("POST", `${ePath}/subscription`, { planId: hostingPlan.planId });
+  record("E", "a second hosting subscription for the same site is refused", duplicate.status === 409, { status: duplicate.status });
+
+  const hostingSession = await checkout();
+  const paid = await fetch(`${API_V1}/public/demo-checkout/${hostingSession}/pay`, { method: "POST" });
+  const activeSub = await subscription();
+  const servedActive = await requestHost(eHost);
+  record("E", "checkout payment activates the hosting plan", paid.ok && activeSub.status === "ACTIVE" && servedActive.status === 200, {
+    subscription: activeSub.status,
+    served: servedActive.status,
+  });
+  const foreignSub = await outsider.call("GET", `${ePath}/subscription`);
+  record("E", "non-member cannot read the subscription", [403, 404].includes(foreignSub.status), { status: foreignSub.status });
+
+  const forged = await paymentWebhook(
+    { type: "subscription.canceled", eventId: `evt_${runId}_forged`, externalSubscriptionId: hostingSession },
+    "00".repeat(32)
+  );
+  record("E", "a webhook with a forged signature changes nothing", forged.status >= 400 && (await subscription()).status === "ACTIVE", {
+    status: forged.status,
+  });
+
+  await owner.must("POST", `/workspaces/${workspaceId}/demo-payments/simulate-payment-failed`, { checkoutSessionId: hostingSession });
+  const pastDueSub = (await subscription()).status;
+  const pastDueSite = await siteStatus();
+  const servedPastDue = await requestHost(eHost);
+  record("E", "failed payment marks subscription and site PAST_DUE", pastDueSub === "PAST_DUE" && pastDueSite === "PAST_DUE", {
+    subscription: pastDueSub,
+    site: pastDueSite,
+    served: servedPastDue.status,
+  });
+  await owner.must("POST", `/workspaces/${workspaceId}/demo-payments/simulate-payment-succeeded`, { checkoutSessionId: hostingSession });
+  const recoveredSite = await siteStatus();
+  const servedRecovered = await requestHost(eHost);
+  record("E", "a successful retry restores ACTIVE + LIVE", (await subscription()).status === "ACTIVE" && recoveredSite === "LIVE" && servedRecovered.status === 200, {
+    site: recoveredSite,
+    served: servedRecovered.status,
+  });
+
+  await owner.must("POST", `${ePath}/subscription`, { planId: maintenancePlan.planId }, [201]);
+  const maintenanceSession = await checkout("MAINTENANCE");
+  await fetch(`${API_V1}/public/demo-checkout/${maintenanceSession}/pay`, { method: "POST" });
+  const cancelMaintenance = await paymentWebhook({ type: "subscription.canceled", eventId: `evt_${runId}_m`, externalSubscriptionId: maintenanceSession });
+  const servedAfterMaintenance = await requestHost(eHost);
+  record(
+    "E",
+    "canceling the maintenance membership keeps the site live",
+    cancelMaintenance.status === 200 && (await subscription("MAINTENANCE")).status === "CANCELED" && servedAfterMaintenance.status === 200,
+    { webhook: cancelMaintenance.status, served: servedAfterMaintenance.status }
+  );
+
+  const cancelEvent = { type: "subscription.canceled", eventId: `evt_${runId}_h`, externalSubscriptionId: hostingSession };
+  const cancelHosting = await paymentWebhook(cancelEvent);
+  const canceledSite = await siteStatus();
+  const servedCanceled = await requestHost(eHost);
+  record(
+    "E",
+    "canceling the hosting plan takes the site offline",
+    cancelHosting.status === 200 && (await subscription()).status === "CANCELED" && canceledSite === "SUSPENDED" && servedCanceled.status !== 200,
+    { webhook: cancelHosting.status, site: canceledSite, served: servedCanceled.status }
+  );
+  const replay = await paymentWebhook(cancelEvent);
+  record("E", "a replayed webhook is acknowledged as a duplicate", replay.status === 200 && replay.json?.duplicate === true, {
+    status: replay.status,
+  });
+
+  await owner.must("POST", `${ePath}/subscription`, { planId: hostingPlan.planId }, [201]);
+  const resubscribeSession = await checkout();
+  const resubscribed = await paymentWebhook({
+    type: "payment.succeeded",
+    eventId: `evt_${runId}_r`,
+    externalSubscriptionId: resubscribeSession,
+    externalPaymentId: `pay_${runId}_r`,
+    amountCents: 2900,
+    currency: "USD",
+  });
+  const resubscribedSite = await siteStatus();
+  const servedResubscribed = await requestHost(eHost);
+  record("E", "resubscribing restores service", resubscribed.status === 200 && resubscribedSite === "LIVE" && servedResubscribed.status === 200, {
+    webhook: resubscribed.status,
+    site: resubscribedSite,
+    served: servedResubscribed.status,
+  });
 
   // ── G: platform administration ────────────────────────────────────────────
   const denied = await outsider.call("GET", "/admin/overview");

@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { validateProductionConfig } from "../config";
 import { createApp } from "../app";
 import { workspaceRouter } from "../interfaces/workspace.routes";
+import { acceptsPaymentWebhook, hostingEntitlementEnded } from "../interfaces/billing.routes";
 
 let server: Server;
 let baseUrl = "";
@@ -42,6 +43,30 @@ async function call(method: string, path: string) {
 }
 
 describe("HTTP contract smoke (sin BD)", () => {
+  it("a payment webhook with a bad signature is a 400, not a 500", async () => {
+    const res = await fetch(`${baseUrl}/api/v1/webhooks/payments/mock`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-sitedock-signature": "00".repeat(32) },
+      body: JSON.stringify({ type: "subscription.canceled", eventId: "evt_forged", externalSubscriptionId: "x" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("INVALID_WEBHOOK_SIGNATURE");
+  });
+
+  it("mock payment webhooks (public demo secret) are refused outside demo mode", () => {
+    expect(acceptsPaymentWebhook("mock", "mock", true)).toBe(true);
+    expect(acceptsPaymentWebhook("mock", "mock", false)).toBe(false);
+    expect(acceptsPaymentWebhook("stripe", "stripe", false)).toBe(true);
+    expect(acceptsPaymentWebhook("mock", "stripe", true)).toBe(false);
+  });
+
+  it("only a canceled HOSTING subscription ends the website entitlement", () => {
+    expect(hostingEntitlementEnded("CANCELED", "HOSTING")).toBe(true);
+    expect(hostingEntitlementEnded("CANCELED", "MAINTENANCE")).toBe(false);
+    expect(hostingEntitlementEnded("PAST_DUE", "HOSTING")).toBe(false);
+    expect(hostingEntitlementEnded("ACTIVE", "HOSTING")).toBe(false);
+  });
+
   it("workspace branding route is addressed by workspace id", () => {
     // requireSession answers 401 for every path under /workspaces, so only the
     // route table can prove PATCH /workspaces/:workspaceId/branding exists.
