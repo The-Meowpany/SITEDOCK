@@ -18,6 +18,11 @@ export async function requirePlatformAdmin(req: Request, _res: Response, next: N
     return;
   }
 
+  if (req.apiToken) {
+    next(new ForbiddenError("API tokens cannot access platform administration"));
+    return;
+  }
+
   const user = await users.findById(UserId(req.userId));
   if (!user) {
     next(new UnauthorizedError("Account no longer exists"));

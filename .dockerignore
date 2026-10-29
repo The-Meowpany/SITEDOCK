@@ -9,6 +9,9 @@ dist/
 coverage/
 packages/database/prisma/generated/
 apps/*/.env.local
+apps/web/
+apps/dashboard/
+apps/admin/
 docs/
 scripts/
 .github/

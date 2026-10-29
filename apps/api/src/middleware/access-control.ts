@@ -5,10 +5,12 @@ import {
   PrismaWorkspaceRepository,
 } from "@sitedock/workspace";
 import { PrismaWebsiteRepository } from "@sitedock/website";
+import { PrismaClient } from "@prisma/client";
 
 const assertWorkspaceAccess = new AssertWorkspaceAccessUseCase(new PrismaWorkspaceRepository());
 const clients = new PrismaClientRepository();
 const websites = new PrismaWebsiteRepository();
+const prisma = new PrismaClient();
 
 export interface AccessContext {
   role: "OWNER" | "ADMIN" | "DEVELOPER" | "CLIENT";
@@ -20,6 +22,12 @@ export interface AccessContext {
    * NOT imply client isolation.
    */
   clientIdScope: string | null;
+  /**
+   * Set when the caller has organization-scoped access. When present,
+   * every resource access must verify the resource belongs to the caller's
+   * organization, not just the workspace. Prevents cross-tenant IDOR.
+   */
+  organizationIdScope: string | null;
 }
 
 /**
@@ -31,6 +39,7 @@ export interface AccessContext {
 export async function resolveWorkspaceAccess(params: {
   workspaceId: string;
   userId: string;
+  organizationId?: string;
   requiredRoles?: Array<"OWNER" | "ADMIN" | "DEVELOPER">;
 }): Promise<AccessContext> {
   const workspace = await assertWorkspaceAccess.execute({
@@ -40,8 +49,11 @@ export async function resolveWorkspaceAccess(params: {
   });
 
   const role = workspace.roleOf(UserId(params.userId))!;
+  let clientIdScope: string | null = null;
+  let organizationIdScope: string | null = null;
+
   if (role !== "CLIENT") {
-    return { role, clientIdScope: null };
+    return { role, clientIdScope: null, organizationIdScope: null };
   }
 
   const client = await clients.findByUserIdInWorkspace(UserId(params.userId), WorkspaceId(params.workspaceId));
@@ -49,7 +61,24 @@ export async function resolveWorkspaceAccess(params: {
     // A CLIENT-role member with no linked client record sees nothing.
     throw new ForbiddenError("This account is not linked to a client of this workspace");
   }
-  return { role, clientIdScope: client.id };
+  clientIdScope = client.id;
+
+  // If organizationId is provided, verify the client belongs to that organization
+  if (params.organizationId) {
+    const member = await prisma.organizationMember.findFirst({
+      where: { organizationId: params.organizationId, userId: params.userId },
+    });
+    const accountOrg = await prisma.accountOrganization.findFirst({
+      where: { organizationId: params.organizationId, accountId: params.userId },
+    });
+    if (member || accountOrg) {
+      organizationIdScope = params.organizationId;
+    } else {
+      organizationIdScope = null;
+    }
+  }
+
+  return { role, clientIdScope, organizationIdScope };
 }
 
 /**

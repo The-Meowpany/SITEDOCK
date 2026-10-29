@@ -1,0 +1,156 @@
+version: "3.9"
+
+services:
+  postgres:
+    extends:
+      file: docker-compose.yml
+      service: postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sitedock_prod}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-sitedock_prod}
+    volumes:
+      - sitedock_postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  api:
+    extends:
+      file: docker-compose.yml
+      service: api
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sitedock_prod}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sitedock_prod}?schema=public
+      NODE_ENV: production
+      PORT: 4000
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN}
+      COOKIE_SECURE: "true"
+      PAYMENT_PROVIDER: stripe
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STORAGE_PROVIDER: s3
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      EMAIL_PROVIDER: resend
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: ${RESEND_FROM}
+      DEMO_MODE: "false"
+      BACKUP_RETENTION_DAYS: 30
+      LOG_LEVEL: info
+      SITEDOCK_BASE_DOMAIN: ${SITEDOCK_BASE_DOMAIN}
+      SITEDOCK_PUBLIC_IP: ${SITEDOCK_PUBLIC_IP:-}
+      SITEDOCK_EDGE_HOSTNAME: ${SITEDOCK_EDGE_HOSTNAME:-}
+      SITEDOCK_CONTROL_HOSTS: ${SITEDOCK_CONTROL_HOSTS:-api,www,admin,app,portal}
+      DOMAIN_PROVIDER: ${DOMAIN_PROVIDER:-dnshe}
+      DNSHE_API_KEY: ${DNSHE_API_KEY:-}
+      DNSHE_API_SECRET: ${DNSHE_API_SECRET:-}
+      DNSHE_API_BASE_URL: ${DNSHE_API_BASE_URL:-https://api005.dnshe.com/index.php}
+      TLS_ASK_SECRET: ${TLS_ASK_SECRET}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:-}
+      GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_WEBHOOK_SECRET: ${GITHUB_APP_WEBHOOK_SECRET:-}
+      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
+      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-}
+      TRUST_PROXY: "true"
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  worker:
+    extends:
+      file: docker-compose.yml
+      service: worker
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sitedock_prod}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sitedock_prod}?schema=public
+      NODE_ENV: production
+      PAYMENT_PROVIDER: stripe
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STORAGE_PROVIDER: s3
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      EMAIL_PROVIDER: resend
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: ${RESEND_FROM}
+      SITEDOCK_BASE_DOMAIN: ${SITEDOCK_BASE_DOMAIN}
+      SITEDOCK_PUBLIC_IP: ${SITEDOCK_PUBLIC_IP:-}
+      DOMAIN_PROVIDER: ${DOMAIN_PROVIDER:-dnshe}
+      DNSHE_API_KEY: ${DNSHE_API_KEY:-}
+      DNSHE_API_SECRET: ${DNSHE_API_SECRET:-}
+      DNSHE_API_BASE_URL: ${DNSHE_API_BASE_URL:-https://api005.dnshe.com/index.php}
+    deploy:
+      replicas: 1
+
+  web:
+    extends:
+      file: docker-compose.yml
+      service: web
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    deploy:
+      replicas: 2
+
+  dashboard:
+    extends:
+      file: docker-compose.yml
+      service: dashboard
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      NEXT_PUBLIC_GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
+    deploy:
+      replicas: 1
+
+  admin:
+    extends:
+      file: docker-compose.yml
+      service: admin
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    deploy:
+      replicas: 1
+
+  caddy:
+    extends:
+      file: docker-compose.yml
+      service: caddy
+    environment:
+      SITEDOCK_BASE_DOMAIN: ${SITEDOCK_BASE_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+      TLS_ASK_SECRET: ${TLS_ASK_SECRET}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    deploy:
+      replicas: 1
+
+  prometheus:
+    extends:
+      file: docker-compose.yml
+      service: prometheus
+
+  otelcol:
+    extends:
+      file: docker-compose.yml
+      service: otelcol
+
+volumes:
+  sitedock_postgres_data:
+  caddy_data:
+  caddy_config:

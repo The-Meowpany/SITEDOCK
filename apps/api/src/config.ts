@@ -28,6 +28,18 @@ export function validateProductionConfig(
     }
   }
 
+  if (env.DOMAIN_PROVIDER === "dnshe") {
+    if (!env.DNSHE_API_KEY || !env.DNSHE_API_SECRET) {
+      errors.push("DOMAIN_PROVIDER=dnshe requires DNSHE_API_KEY and DNSHE_API_SECRET");
+    }
+    if (!env.SITEDOCK_BASE_DOMAIN) {
+      errors.push("DOMAIN_PROVIDER=dnshe requires SITEDOCK_BASE_DOMAIN");
+    }
+    if (!env.SITEDOCK_PUBLIC_IP && !env.SITEDOCK_EDGE_HOSTNAME) {
+      errors.push("DOMAIN_PROVIDER=dnshe requires SITEDOCK_PUBLIC_IP or SITEDOCK_EDGE_HOSTNAME");
+    }
+  }
+
   if (env.EMAIL_PROVIDER === "resend") {
     if (!env.RESEND_API_KEY) errors.push("EMAIL_PROVIDER=resend requires RESEND_API_KEY");
     if (!env.RESEND_FROM) errors.push("EMAIL_PROVIDER=resend requires RESEND_FROM");

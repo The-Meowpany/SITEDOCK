@@ -3,6 +3,8 @@ import { runNotifyUpcomingRenewalsJob } from "./jobs/notify-upcoming-renewals.jo
 import { runNotifyExpiringSslDomainsJob } from "./jobs/notify-expiring-ssl-domains.job";
 import { runBackupLiveWebsitesJob } from "./jobs/backup-live-websites.job";
 import { runCleanupExpiredBackupsJob } from "./jobs/cleanup-expired-backups.job";
+import { runProcessQueuedDeploymentsJob } from "./jobs/process-queued-deployments.job";
+import { runProcessQueuedPreviewDeploymentsJob } from "./jobs/process-queued-preview-deployments.job";
 
 export interface ScheduledJob {
   name: string;
@@ -11,13 +13,23 @@ export interface ScheduledJob {
   run: () => Promise<unknown>;
 }
 
-/**
+/** 
  * Job registry (docs/ARCHITECTURE.md §29/§31 "Scheduled Jobs"). Each job here
  * must be idempotent — re-running it twice in a row (e.g. after a crash/restart)
  * must never double-apply an effect. New jobs get added here as their own file
  * under ./jobs, following the same shape.
  */
 export const scheduledJobs: ScheduledJob[] = [
+  {
+    name: "process-queued-deployments",
+    intervalMs: 10 * 1000,
+    run: async () => runProcessQueuedDeploymentsJob("worker-container"),
+  },
+  {
+    name: "process-queued-preview-deployments",
+    intervalMs: 10 * 1000,
+    run: async () => runProcessQueuedPreviewDeploymentsJob("worker-preview-container"),
+  },
   {
     name: "suspend-overdue-subscriptions",
     intervalMs: 15 * 60 * 1000, // every 15 minutes

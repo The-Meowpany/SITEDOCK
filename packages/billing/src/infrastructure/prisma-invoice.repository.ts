@@ -46,6 +46,7 @@ export class PrismaInvoiceRepository implements InvoiceRepository {
 
   async save(invoice: Invoice): Promise<void> {
     const data = {
+      id: invoice.id,
       kind: invoice.kind,
       subscriptionId: invoice.subscriptionId,
       websiteId: invoice.websiteId,

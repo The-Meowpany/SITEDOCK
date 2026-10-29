@@ -2,8 +2,8 @@
   "name": "@sitedock/database",
   "version": "0.1.0",
   "private": true,
-  "main": "src/client.ts",
-  "types": "src/client.ts",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

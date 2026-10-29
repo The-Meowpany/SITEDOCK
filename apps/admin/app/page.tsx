@@ -4,10 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import type {
+  AdminDnsStatus,
   AdminPaymentRow,
   AdminUserRow,
   AdminWebhookEventRow,
   AdminWebsiteRow,
+  DnsProvisionResult,
   PlatformOverview,
   TenantRow,
 } from "@/lib/api-client";
@@ -41,6 +43,10 @@ export default function AdminConsolePage() {
   const [websites, setWebsites] = useState<AdminWebsiteRow[]>([]);
   const [payments, setPayments] = useState<AdminPaymentRow[]>([]);
   const [events, setEvents] = useState<AdminWebhookEventRow[]>([]);
+  const [dnsStatus, setDnsStatus] = useState<AdminDnsStatus | null>(null);
+  const [dnsResult, setDnsResult] = useState<DnsProvisionResult | null>(null);
+  const [dnsPublicIp, setDnsPublicIp] = useState("");
+  const [dnsBusy, setDnsBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [busySiteId, setBusySiteId] = useState<string | null>(null);
@@ -56,14 +62,16 @@ export default function AdminConsolePage() {
       api.listWebsites(),
       api.listPayments(),
       api.listWebhookEvents(),
+      api.getDnsStatus().catch(() => null),
     ])
-      .then(([o, t, u, w, p, e]) => {
+      .then(([o, t, u, w, p, e, d]) => {
         setOverview(o);
         setTenants(t);
         setUsers(u);
         setWebsites(w);
         setPayments(p);
         setEvents(e);
+        setDnsStatus(d);
       })
       .catch((err) => {
         if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
@@ -100,6 +108,22 @@ export default function AdminConsolePage() {
     }
   }
 
+  async function provisionDns(apply: boolean) {
+    if (apply && !window.confirm("Crear los registros A @ y * en la zona base de DNSHE?")) return;
+    setDnsBusy(apply ? "apply" : "dry-run");
+    setError(null);
+    try {
+      const publicIp = dnsPublicIp.trim();
+      const result = await api.provisionDns({ apply, publicIp: publicIp || undefined });
+      setDnsResult(result);
+      setDnsStatus(await api.getDnsStatus().catch(() => dnsStatus));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos provisionar DNS.");
+    } finally {
+      setDnsBusy(null);
+    }
+  }
+
   if (error && !overview) {
     return (
       <main className={styles.page}>
@@ -127,6 +151,7 @@ export default function AdminConsolePage() {
         <a href="#tenants">Workspaces</a>
         <a href="#usuarios">Usuarios</a>
         <a href="#sitios">Sitios</a>
+        <a href="#dns">DNSHE</a>
         <a href="#pagos">Pagos y webhooks</a>
       </nav>
 
@@ -247,6 +272,121 @@ export default function AdminConsolePage() {
             )}
           </tbody>
         </table>
+      </section>
+
+      <section id="dns" className={styles.panel} aria-label="DNSHE">
+        <h2 className={styles.panelTitle}>DNSHE / dominio base</h2>
+        {!dnsStatus ? (
+          <p className={styles.dim}>No pudimos consultar el estado de DNSHE.</p>
+        ) : !dnsStatus.configured ? (
+          <>
+            <p className={styles.down}>{dnsStatus.message}</p>
+            <p className={styles.dim}>
+              Configurá DNSHE_API_KEY, DNSHE_API_SECRET, SITEDOCK_BASE_DOMAIN y SITEDOCK_PUBLIC_IP para gestionar la zona.
+            </p>
+          </>
+        ) : (
+          <>
+            <table className={styles.table}>
+              <tbody>
+                <tr>
+                  <th scope="row">Dominio base</th>
+                  <td className={styles.money}>{dnsStatus.baseDomain ?? "—"}</td>
+                  <th scope="row">Zona</th>
+                  <td>{dnsStatus.zoneFound ? dnsStatus.zone?.fullDomain : "No encontrada"}</td>
+                </tr>
+                <tr>
+                  <th scope="row">Estado de zona</th>
+                  <td>{dnsStatus.zone?.status ?? "—"}</td>
+                  <th scope="row">Vence</th>
+                  <td className={styles.dim}>
+                    {dnsStatus.zone?.expiresAt ? new Date(dnsStatus.zone.expiresAt).toLocaleDateString("es") : "—"}
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">IP pública</th>
+                  <td className={dnsStatus.publicIpConfigured ? styles.up : styles.down}>
+                    {dnsStatus.publicIpConfigured ? "Configurada" : "Falta SITEDOCK_PUBLIC_IP"}
+                  </td>
+                  <th scope="row">Registros</th>
+                  <td>{dnsStatus.recordCount ?? 0}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div className={styles.inlineForm}>
+              <input
+                className={styles.input}
+                placeholder="IP pública (opcional si está en .env)"
+                value={dnsPublicIp}
+                onChange={(e) => setDnsPublicIp(e.target.value)}
+                aria-label="IP pública"
+              />
+              <button className={styles.btnGood} disabled={!!dnsBusy} onClick={() => provisionDns(false)}>
+                {dnsBusy === "dry-run" ? "Simulando…" : "Simular A @ y *"}
+              </button>
+              <button className={styles.btnDanger} disabled={!!dnsBusy} onClick={() => provisionDns(true)}>
+                {dnsBusy === "apply" ? "Aplicando…" : "Aplicar A @ y *"}
+              </button>
+            </div>
+
+            <h2 className={`${styles.panelTitle} ${styles.spaced}`}>Registros de la zona</h2>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th scope="col">Nombre</th>
+                  <th scope="col">Tipo</th>
+                  <th scope="col">Valor</th>
+                  <th scope="col">TTL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(dnsStatus.records ?? []).length === 0 ? (
+                  <EmptyRow colSpan={4}>La zona no tiene registros.</EmptyRow>
+                ) : (
+                  (dnsStatus.records ?? []).map((record) => (
+                    <tr key={`${record.type}-${record.name}-${record.value}`}>
+                      <td className={styles.money}>{record.name}</td>
+                      <td>{record.type}</td>
+                      <td className={styles.dim}>{record.value}</td>
+                      <td className={styles.dim}>{record.ttl}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+
+            {dnsResult && (
+              <>
+                <h2 className={`${styles.panelTitle} ${styles.spaced}`}>
+                  Resultado {dnsResult.applied ? "(aplicado)" : "(simulación)"}
+                </h2>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th scope="col">Nombre</th>
+                      <th scope="col">Tipo</th>
+                      <th scope="col">Valor</th>
+                      <th scope="col">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dnsResult.records.map((record) => (
+                      <tr key={`${record.type}-${record.name}`}>
+                        <td className={styles.money}>{record.name}</td>
+                        <td>{record.type}</td>
+                        <td className={styles.dim}>{record.value}</td>
+                        <td className={record.action === "conflict" ? styles.down : record.action === "create" ? styles.up : ""}>
+                          {record.action}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </>
+        )}
       </section>
 
       <section id="pagos" className={styles.panel} aria-label="Pagos y webhooks">

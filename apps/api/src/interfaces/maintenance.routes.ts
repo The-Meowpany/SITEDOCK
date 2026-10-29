@@ -8,6 +8,7 @@ import {
   CompleteMaintenanceRequestUseCase,
   CreateMaintenanceRequestUseCase,
   GetMaintenanceAllowanceForWebsiteUseCase,
+  isWithinIncludedMaintenanceQuota,
   ListMaintenanceCommentsUseCase,
   ListMaintenanceRequestsUseCase,
   MarkMaintenanceRequestPaidUseCase,
@@ -86,9 +87,19 @@ async function resolveTierCoverage(websiteId: string, workspaceId: string): Prom
     periodEnd,
   });
 
+  // `usedThisPeriod` already includes the request that was just created, so the
+  // request is covered when its ordinal is within the included quota. The
+  // allowance's `overQuota` flag means the quota is exhausted (used >= quota),
+  // which would incorrectly reject the last included request.
+  const withinQuota = isWithinIncludedMaintenanceQuota(
+    allowance.quotaIncluded,
+    allowance.usedThisPeriod
+  );
+
   return {
     hasMembership: true,
-    covered: !allowance.overQuota && (membership.status === "ACTIVE" || membership.status === "TRIALING"),
+    covered:
+      withinQuota && (membership.status === "ACTIVE" || membership.status === "TRIALING"),
     quotaIncluded: allowance.quotaIncluded,
     usedThisPeriod: allowance.usedThisPeriod,
     remaining: allowance.remaining,

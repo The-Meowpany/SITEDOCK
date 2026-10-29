@@ -1,28 +1,22 @@
-# ── SiteDock Web (client portal) ─────────────────────────────
-FROM node:20-slim AS base
+FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
+RUN npm ci --include=dev
+COPY . .
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build -w apps/web
 
-FROM base AS deps
-RUN npm ci --ignore-scripts
-
-FROM base AS build
-COPY packages/ packages/
-COPY apps/ apps/
-COPY tsconfig.base.json ./
-RUN npx prisma generate --schema packages/database/prisma/schema.prisma \
-  && npm run build -w apps/web
-
-FROM node:20-slim AS runtime
+FROM node:20-alpine AS runner
 WORKDIR /app
-RUN groupadd -r sitedock && useradd -r -g sitedock sitedock
-
-COPY --from=build /app/apps/web/.next/standalone ./
-COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
-
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+RUN addgroup --system --gid 1001 sitedock && \
+    adduser --system --uid 1001 sitedock
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/web/.next ./apps/web/.next
+COPY --from=builder /app/apps/web/package.json ./apps/web/package.json
+COPY --from=builder /app/apps/web/public ./apps/web/public
 USER sitedock
 EXPOSE 3000
-
-ENV PORT=3000 HOSTNAME=0.0.0.0
-
-CMD ["node", "apps/web/server.js"]
+CMD ["node", "apps/web/.next/standalone/server.js"]

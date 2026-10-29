@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "npm run dev -w apps/api",
     "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "node scripts/test-wrapper.mjs",
+    "test:unit": "node scripts/test-unit.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "e2e": "node scripts/e2e-demo.mjs",

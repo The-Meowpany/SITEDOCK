@@ -4,4 +4,6 @@ export * from "./value-objects";
 export * from "./retry-policy";
 export * from "./provider-metrics";
 export * from "./money-math";
+export * from "./permissions";
+export * from "./secret-cipher";
 

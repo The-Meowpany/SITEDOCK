@@ -1,0 +1,43 @@
+{
+  # Local development Caddy — HTTP only, no ACME/TLS.
+  # Production TLS is a separate, explicitly authorized deployment task.
+}
+
+# ── Public static website delivery ─────────────────────────────
+# Serves published websites at http://localhost:80/sites/<subdomain>/*
+# Proxied to the API which fetches from storage and enforces
+# LIVE-status + publication gating.
+/sites/* {
+  reverse_proxy api:4000
+  header_up Host {host}
+  header_up X-Real-IP {remote}
+  header_up X-Forwarded-For {remote}
+  header_up X-Forwarded-Proto {scheme}
+}
+
+# ── API ────────────────────────────────────────────────────────
+/api/* {
+  reverse_proxy api:4000
+  header_up Host {host}
+  header_up X-Real-IP {remote}
+  header_up X-Forwarded-For {remote}
+  header_up X-Forwarded-Proto {scheme}
+}
+
+# ── Portal cliente ─────────────────────────────────────────────
+/ {
+  reverse_proxy web:3000
+  header_up Host {host}
+}
+
+# ── Consola desarrollador ──────────────────────────────────────
+/dashboard/* {
+  reverse_proxy dashboard:3001
+  header_up Host {host}
+}
+
+# ── Consola admin ──────────────────────────────────────────────
+/admin/* {
+  reverse_proxy admin:3002
+  header_up Host {host}
+}

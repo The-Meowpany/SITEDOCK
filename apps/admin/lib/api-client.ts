@@ -82,6 +82,25 @@ export interface AdminWebhookEventRow {
   receivedAt: string;
 }
 
+export interface AdminDnsStatus {
+  configured: boolean;
+  baseDomain: string | null;
+  zoneFound?: boolean;
+  zone?: { id: string; fullDomain: string; status: string; expiresAt: string | null } | null;
+  zoneCount?: number;
+  publicIpConfigured: boolean;
+  recordCount?: number;
+  records?: Array<{ name: string; type: string; value: string; ttl: number }>;
+  message?: string;
+}
+
+export interface DnsProvisionResult {
+  changed: boolean;
+  applied: boolean;
+  zone: string;
+  records: Array<{ name: string; type: string; value: string; action: "create" | "exists" | "conflict" }>;
+}
+
 export const api = {
   login: (email: string, password: string) =>
     request<{ userId: string; fullName: string }>("/api/v1/auth/login", {
@@ -113,4 +132,12 @@ export const api = {
   listPayments: () => request<AdminPaymentRow[]>("/api/v1/admin/payments"),
 
   listWebhookEvents: () => request<AdminWebhookEventRow[]>("/api/v1/admin/webhook-events"),
+
+  getDnsStatus: () => request<AdminDnsStatus>("/api/v1/admin/dns/status"),
+
+  provisionDns: (input: { apply: boolean; publicIp?: string }) =>
+    request<DnsProvisionResult>("/api/v1/admin/dns/provision-base", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 };

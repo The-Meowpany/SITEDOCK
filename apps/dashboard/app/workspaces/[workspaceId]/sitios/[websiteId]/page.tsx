@@ -8,8 +8,13 @@ import type {
   ChargeSummary,
   ClientSummary,
   DeploymentSummary,
+  DomainDetail,
+  DomainListResponse,
+  GitHubConnection,
+  GitHubRepository,
   MaintenanceRequestSummary,
   PlanDetail,
+  ServiceSummary,
   SubscriptionDetail,
   WebsiteSummary,
 } from "@/lib/api-client";
@@ -30,6 +35,20 @@ const REQ_STATUS: Record<MaintenanceRequestSummary["status"], string> = {
   CANCELED: "Cancelada",
 };
 
+const DOMAIN_STATUS: Record<DomainDetail["status"], string> = {
+  PENDING: "Pendiente",
+  VERIFYING: "Verificando",
+  VERIFIED: "Verificado",
+  FAILED: "Falló",
+};
+
+const SSL_STATUS: Record<DomainDetail["sslStatus"], string> = {
+  NONE: "Sin certificado",
+  PENDING: "Emitiendo",
+  ISSUED: "Activo",
+  FAILED: "Error",
+};
+
 export default function SiteConsolePage() {
   const params = useParams<{ workspaceId: string; websiteId: string }>();
   const router = useRouter();
@@ -44,6 +63,17 @@ export default function SiteConsolePage() {
   const [tierSub, setTierSub] = useState<SubscriptionDetail | null>(null);
   const [requests, setRequests] = useState<MaintenanceRequestSummary[]>([]);
   const [charges, setCharges] = useState<ChargeSummary[]>([]);
+  const [domainData, setDomainData] = useState<DomainListResponse>({
+    provider: "manual",
+    managed: false,
+    domains: [],
+  });
+  const [services, setServices] = useState<ServiceSummary[]>([]);
+  const [githubConnections, setGithubConnections] = useState<GitHubConnection[]>([]);
+  const [githubInstallationId, setGithubInstallationId] = useState("");
+  const [githubRepos, setGithubRepos] = useState<GitHubRepository[]>([]);
+  const [githubRepoId, setGithubRepoId] = useState("");
+  const [githubServiceId, setGithubServiceId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -57,20 +87,41 @@ export default function SiteConsolePage() {
   const [tierPlanId, setTierPlanId] = useState("");
   const [chargeTitle, setChargeTitle] = useState("");
   const [chargePrice, setChargePrice] = useState("");
+  const [domainHostname, setDomainHostname] = useState("");
+  const [domainServiceId, setDomainServiceId] = useState("");
+  const [domainAutoManage, setDomainAutoManage] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [siteData, deploymentsData, clientsData, plansData, hostingSubData, tierSubData, requestsData, chargesData, allowanceData] =
-      await Promise.all([
-        api.getWebsite(workspaceId, websiteId),
-        api.listDeployments(workspaceId, websiteId),
-        api.listClients(workspaceId),
-        api.listPlans(workspaceId),
-        api.getSubscription(workspaceId, websiteId, "HOSTING"),
-        api.getSubscription(workspaceId, websiteId, "MAINTENANCE"),
-        api.listMaintenanceRequests(workspaceId, websiteId).catch(() => [] as MaintenanceRequestSummary[]),
-        api.listCharges(workspaceId, websiteId).catch(() => [] as ChargeSummary[]),
-        api.getAllowance(workspaceId, websiteId).catch(() => null),
-      ]);
+    const siteData = await api.getWebsite(workspaceId, websiteId);
+    const [
+      deploymentsData,
+      clientsData,
+      plansData,
+      hostingSubData,
+      tierSubData,
+      requestsData,
+      chargesData,
+      allowanceData,
+      domainsData,
+      servicesData,
+      githubData,
+    ] = await Promise.all([
+      api.listDeployments(workspaceId, websiteId),
+      api.listClients(workspaceId),
+      api.listPlans(workspaceId),
+      api.getSubscription(workspaceId, websiteId, "HOSTING"),
+      api.getSubscription(workspaceId, websiteId, "MAINTENANCE"),
+      api.listMaintenanceRequests(workspaceId, websiteId).catch(() => [] as MaintenanceRequestSummary[]),
+      api.listCharges(workspaceId, websiteId).catch(() => [] as ChargeSummary[]),
+      api.getAllowance(workspaceId, websiteId).catch(() => null),
+      api.listDomains(workspaceId, websiteId).catch(
+        () => ({ provider: "manual", managed: false, domains: [] }) as DomainListResponse
+      ),
+      siteData.projectId
+        ? api.listServices(workspaceId, siteData.projectId).catch(() => [] as ServiceSummary[])
+        : Promise.resolve([] as ServiceSummary[]),
+      api.listGitHubConnections(workspaceId, websiteId).catch(() => [] as GitHubConnection[]),
+    ]);
     setSite(siteData);
     setDeployments(deploymentsData);
     setClients(clientsData);
@@ -79,10 +130,43 @@ export default function SiteConsolePage() {
     setTierSub(tierSubData);
     setRequests(requestsData);
     setCharges(chargesData);
+    setDomainData(domainsData);
+    setServices(servicesData);
+    setGithubConnections(githubData);
     return allowanceData;
   }, [workspaceId, websiteId]);
 
   const [allowance, setAllowance] = useState<Awaited<ReturnType<typeof api.getAllowance>> | null>(null);
+
+  async function loadGitHubRepos(installationId = githubInstallationId) {
+    const id = installationId.trim();
+    if (!/^\d{1,20}$/.test(id)) {
+      setError("Pegá el installation ID numérico que devolvió GitHub.");
+      return;
+    }
+    setBusy("github-repos");
+    setError(null);
+    try {
+      const result = await api.listGitHubRepositories(workspaceId, websiteId, id);
+      setGithubRepos(result.repositories);
+      setGithubRepoId((current) =>
+        result.repositories.some((repo) => repo.id === current) ? current : result.repositories[0]?.id ?? ""
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos listar los repositorios.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const installationId = query.get("installation_id");
+    if (!installationId) return;
+    setGithubInstallationId(installationId);
+    void loadGitHubRepos(installationId);
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -253,6 +337,72 @@ export default function SiteConsolePage() {
       setBusy(null);
     }
   }
+
+  // ── Dominios ─────────────────────────────────────────────
+  async function reloadDomains() {
+    setDomainData(await api.listDomains(workspaceId, websiteId));
+  }
+
+  const connectDomain = guard(async () => {
+    const hostname = domainHostname.trim();
+    if (!hostname) throw new Error("Escribí el dominio que querés conectar.");
+    await api.registerDomain(workspaceId, websiteId, hostname, {
+      serviceId: domainServiceId || null,
+      autoManage: domainAutoManage,
+    });
+    setDomainHostname("");
+    setDomainServiceId("");
+    setDomainAutoManage(false);
+    await reloadDomains();
+  }, "domain-connect");
+
+  const verifyDomainById = guard(async (domainId: string) => {
+    const result = await api.verifyDomain(workspaceId, websiteId, domainId);
+    await reloadDomains();
+    if (!result.verified) {
+      throw new Error(result.message ?? "El registro de propiedad todavía no es visible en DNS.");
+    }
+    if (result.sslStatus === "FAILED") {
+      throw new Error(result.message ?? "El dominio está verificado, pero el certificado aún no está disponible.");
+    }
+  }, "domain-verify");
+
+  const checkDomainById = guard(async (domainId: string) => {
+    const result = await api.checkDomain(workspaceId, websiteId, domainId);
+    await reloadDomains();
+    if (result.sslStatus === "FAILED") {
+      throw new Error(result.message ?? "El certificado todavía no está disponible.");
+    }
+  }, "domain-check");
+
+  const removeDomainById = guard(async (domainId: string, hostname: string) => {
+    if (!window.confirm(`¿Desconectar ${hostname} de este sitio?`)) return;
+    await api.deleteDomain(workspaceId, websiteId, domainId);
+    await reloadDomains();
+  }, "domain-delete");
+
+  // ── GitHub ───────────────────────────────────────────────
+  const connectGitHubRepo = guard(async () => {
+    const repo = githubRepos.find((candidate) => candidate.id === githubRepoId);
+    if (!repo) throw new Error("Elegí un repositorio de la instalación.");
+    await api.connectGitHub(workspaceId, websiteId, {
+      installationId: githubInstallationId.trim(),
+      repositoryId: repo.id,
+      repositoryFullName: repo.fullName,
+      serviceId: githubServiceId || null,
+    });
+    setGithubConnections(await api.listGitHubConnections(workspaceId, websiteId));
+    setGithubInstallationId("");
+    setGithubRepos([]);
+    setGithubRepoId("");
+    setGithubServiceId("");
+  }, "github-connect");
+
+  const disconnectGitHubRepo = guard(async (connectionId: string, repositoryFullName: string) => {
+    if (!window.confirm(`¿Desconectar ${repositoryFullName}?`)) return;
+    await api.disconnectGitHub(workspaceId, websiteId, connectionId);
+    setGithubConnections(await api.listGitHubConnections(workspaceId, websiteId));
+  }, "github-disconnect");
 
   if (error && !site) {
     return <main className={styles.page}><p className={styles.error}>{error}</p></main>;
@@ -446,6 +596,267 @@ export default function SiteConsolePage() {
                 {busy === "attach-client" ? "Asignando…" : "Asignar al sitio"}
               </button>
             </>
+          )}
+        </section>
+
+        {/* ── Dominios ── */}
+        <section className={`${styles.panel} ${styles.span2}`} aria-label="Dominios">
+          <div className={styles.domainTitleRow}>
+            <h2 className={styles.panelTitle}>Dominios</h2>
+            <span className={styles.domainProvider}>
+              {domainData.provider === "dnshe" ? "DNSHE" : domainData.provider} ·{" "}
+              {domainData.managed ? "DNS gestionado" : "DNS manual"}
+            </span>
+          </div>
+          <p className={styles.dim}>
+            Conectá un dominio propio. Primero publicás un TXT de propiedad; después apuntás el
+            tráfico al edge y SiteDock emite el certificado automáticamente.
+          </p>
+
+          <div className={styles.domainForm}>
+            <input
+              className={inputClass}
+              placeholder="midominio.com"
+              value={domainHostname}
+              onChange={(e) => setDomainHostname(e.target.value)}
+              aria-label="Dominio a conectar"
+            />
+            <select
+              className={selectClass}
+              value={domainServiceId}
+              onChange={(e) => setDomainServiceId(e.target.value)}
+              aria-label="Servicio destino"
+            >
+              <option value="">Sitio estático (por defecto)</option>
+              {services.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name} · {service.hostname} ({service.status})
+                </option>
+              ))}
+            </select>
+            <button className={btnPrimary} disabled={busy === "domain-connect"} onClick={() => connectDomain()}>
+              {busy === "domain-connect" ? "Conectando…" : "Conectar dominio"}
+            </button>
+          </div>
+          {domainData.managed && (
+            <label className={styles.checkLine}>
+              <input
+                type="checkbox"
+                checked={domainAutoManage}
+                onChange={(e) => setDomainAutoManage(e.target.checked)}
+              />
+              Crear el registro TXT automáticamente si el dominio está en la cuenta DNSHE
+            </label>
+          )}
+
+          {domainData.domains.length === 0 ? (
+            <p className={styles.empty}>Todavía no hay dominios conectados.</p>
+          ) : (
+            <ul className={styles.domainList}>
+              {domainData.domains.map((domain) => {
+                const targetService = domain.serviceId
+                  ? services.find((s) => s.id === domain.serviceId)
+                  : null;
+                return (
+                  <li key={domain.id} className={styles.domainItem}>
+                    <div className={styles.domainHead}>
+                      <strong className={styles.mono}>{domain.hostname}</strong>
+                      <span className={`${styles.badge} ${domain.status === "VERIFIED" ? styles.domainOk : ""}`}>
+                        {DOMAIN_STATUS[domain.status]}
+                      </span>
+                      <span className={styles.dim}>
+                        {targetService ? `→ ${targetService.name}` : "→ sitio estático"}
+                      </span>
+                      {domain.autoManaged && <span className={styles.domainProvider}>auto</span>}
+                    </div>
+
+                    {domain.lastError && <p className={styles.domainError}>{domain.lastError}</p>}
+
+                    <div className={styles.domainMeta}>
+                      <span>DNS: {domain.routingOk ? "apunta al edge" : "pendiente"}</span>
+                      <span>SSL: {SSL_STATUS[domain.sslStatus]}</span>
+                      {domain.sslExpiresAt && (
+                        <span>Vence: {new Date(domain.sslExpiresAt).toLocaleDateString("es")}</span>
+                      )}
+                    </div>
+
+                    {domain.dnsRecord.name && domain.dnsRecord.value && domain.status !== "VERIFIED" && (
+                      <div className={styles.dnsBox}>
+                        <span className={styles.dnsLabel}>Propiedad</span>
+                        <code className={styles.dnsValue}>
+                          {domain.dnsRecord.type} {domain.dnsRecord.name} → {domain.dnsRecord.value}
+                        </code>
+                        <button
+                          className={styles.linkBtn}
+                          onClick={() =>
+                            copyText(`txt-${domain.id}`, `${domain.dnsRecord.name} ${domain.dnsRecord.value}`)
+                          }
+                        >
+                          {copiedKey === `txt-${domain.id}` ? "¡Copiado!" : "Copiar"}
+                        </button>
+                      </div>
+                    )}
+
+                    {domain.instructions && (
+                      <div className={styles.dnsBox}>
+                        <span className={styles.dnsLabel}>Tráfico</span>
+                        <code className={styles.dnsValue}>
+                          {domain.instructions.recordType} {domain.instructions.recordName} →{" "}
+                          {domain.instructions.recordValue}
+                        </code>
+                        <button
+                          className={styles.linkBtn}
+                          onClick={() =>
+                            copyText(
+                              `route-${domain.id}`,
+                              `${domain.instructions!.recordName} ${domain.instructions!.recordValue}`
+                            )
+                          }
+                        >
+                          {copiedKey === `route-${domain.id}` ? "¡Copiado!" : "Copiar"}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className={styles.domainActions}>
+                      {domain.status !== "VERIFIED" ? (
+                        <button
+                          className={btnPrimary}
+                          disabled={busy === "domain-verify"}
+                          onClick={() => verifyDomainById(domain.id)}
+                        >
+                          {busy === "domain-verify" ? "Comprobando…" : "Verificar propiedad"}
+                        </button>
+                      ) : (
+                        <button
+                          className={btnGhost}
+                          disabled={busy === "domain-check"}
+                          onClick={() => checkDomainById(domain.id)}
+                        >
+                          {busy === "domain-check" ? "Comprobando…" : "Comprobar DNS + SSL"}
+                        </button>
+                      )}
+                      <button
+                        className={styles.linkBtn}
+                        disabled={busy === "domain-delete"}
+                        onClick={() => removeDomainById(domain.id, domain.hostname)}
+                      >
+                        Desconectar
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        {/* ── GitHub ── */}
+        <section className={`${styles.panel} ${styles.span2}`} aria-label="GitHub">
+          <div className={styles.domainTitleRow}>
+            <h2 className={styles.panelTitle}>GitHub</h2>
+            <span className={styles.domainProvider}>GitHub App</span>
+          </div>
+          <p className={styles.dim}>
+            Conectá un repositorio para publicar desde GitHub: los pushes a la rama principal
+            despliegan producción y las pull requests generan previews.
+          </p>
+
+          <div className={styles.domainForm}>
+            {process.env.NEXT_PUBLIC_GITHUB_APP_SLUG ? (
+              <a
+                className={btnPrimary}
+                href={`https://github.com/apps/${process.env.NEXT_PUBLIC_GITHUB_APP_SLUG}/installations/new?state=${encodeURIComponent(`${workspaceId}:${websiteId}`)}`}
+              >
+                Instalar GitHub App
+              </a>
+            ) : (
+              <span className={styles.dim}>Configurá NEXT_PUBLIC_GITHUB_APP_SLUG para habilitar la instalación.</span>
+            )}
+            <input
+              className={inputClass}
+              placeholder="Installation ID (si ya instalaste la app)"
+              value={githubInstallationId}
+              onChange={(e) => setGithubInstallationId(e.target.value)}
+              inputMode="numeric"
+              aria-label="GitHub installation ID"
+            />
+            <button
+              className={btnGhost}
+              disabled={busy === "github-repos"}
+              onClick={() => loadGitHubRepos()}
+            >
+              {busy === "github-repos" ? "Cargando…" : "Ver repositorios"}
+            </button>
+          </div>
+
+          {githubRepos.length > 0 && (
+            <div className={styles.domainForm}>
+              <select
+                className={selectClass}
+                value={githubRepoId}
+                onChange={(e) => setGithubRepoId(e.target.value)}
+                aria-label="Repositorio"
+              >
+                {githubRepos.map((repo) => (
+                  <option key={repo.id} value={repo.id}>
+                    {repo.fullName}{repo.private ? " · privado" : ""}
+                  </option>
+                ))}
+              </select>
+              <select
+                className={selectClass}
+                value={githubServiceId}
+                onChange={(e) => setGithubServiceId(e.target.value)}
+                aria-label="Servicio a desplegar"
+              >
+                <option value="">Sitio estático (por defecto)</option>
+                {services.map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.name} · {service.hostname}
+                  </option>
+                ))}
+              </select>
+              <button
+                className={btnPrimary}
+                disabled={busy === "github-connect"}
+                onClick={() => connectGitHubRepo()}
+              >
+                {busy === "github-connect" ? "Conectando…" : "Conectar repositorio"}
+              </button>
+            </div>
+          )}
+
+          {githubConnections.length === 0 ? (
+            <p className={styles.empty}>Todavía no hay repositorios conectados.</p>
+          ) : (
+            <ul className={styles.domainList}>
+              {githubConnections.map((connection) => {
+                const targetServices = connection.serviceId
+                  ? services.find((service) => service.id === connection.serviceId)
+                  : null;
+                return (
+                  <li key={connection.id} className={styles.domainItem}>
+                    <div className={styles.domainHead}>
+                      <strong className={styles.mono}>{connection.repositoryFullName}</strong>
+                      <span className={`${styles.badge} ${styles.domainOk}`}>Conectado</span>
+                      <span className={styles.dim}>
+                        rama {connection.defaultBranch} · {targetServices ? targetServices.name : "sitio estático"}
+                      </span>
+                    </div>
+                    <div className={styles.domainActions}>
+                      <button
+                        className={styles.linkBtn}
+                        disabled={busy === "github-disconnect"}
+                        onClick={() => disconnectGitHubRepo(connection.id, connection.repositoryFullName)}
+                      >
+                        Desconectar
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </section>
 

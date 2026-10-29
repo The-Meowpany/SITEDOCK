@@ -79,3 +79,23 @@ export class PrismaDeploymentRepository implements DeploymentRepository {
     });
   }
 }
+
+/**
+ * PrismaDeploymentLogRepository - currently disabled because the
+ * ServiceDeploymentLog model is not in the Prisma schema.
+ * These methods can be re-enabled when the model is added.
+ */
+
+export class PrismaDeploymentLogRepository {
+  async findByService(_serviceId: string): Promise<never> {
+    throw new Error("PrismaDeploymentLogRepository not available: ServiceDeploymentLog model not in schema");
+  }
+
+  async countByService(_serviceId: string): Promise<never> {
+    throw new Error("PrismaDeploymentLogRepository not available: ServiceDeploymentLog model not in schema");
+  }
+
+  async create(_data: { serviceId: string; deploymentId: string }): Promise<never> {
+    throw new Error("PrismaDeploymentLogRepository not available: ServiceDeploymentLog model not in schema");
+  }
+}

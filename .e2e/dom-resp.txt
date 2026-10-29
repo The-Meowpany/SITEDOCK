@@ -1,0 +1,2 @@
+{"domainId":"6ce97abd-2043-4705-8216-1f4469277345","hostname":"www.e2e-customer.test","status":"VERIFYING","provider":"manual","recordName":"_sitedock-verify.www.e2e-customer.test","recordValue":"sitedock-verification=eac1a3cae5786c8df7fca2d130d7f0bd","routing":null,"autoManaged":false}
+http=201

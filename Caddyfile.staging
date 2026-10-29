@@ -1,0 +1,39 @@
+{
+  email {$ACME_EMAIL}
+  on_demand_tls {
+    ask http://api:4000/internal/tls/ask?secret={$TLS_ASK_SECRET}
+    interval 2m
+    burst 20
+  }
+}
+
+# Staging uses the same host labels as production under a staging suffix.
+# Set SITEDOCK_STAGING_DOMAIN=staging.sitedock.us.ci (or similar) in .env.
+api.{$SITEDOCK_STAGING_DOMAIN} {
+  reverse_proxy api:4000
+}
+
+www.{$SITEDOCK_STAGING_DOMAIN} {
+  reverse_proxy web:3000
+}
+
+app.{$SITEDOCK_STAGING_DOMAIN} {
+  reverse_proxy dashboard:3001
+}
+
+admin.{$SITEDOCK_STAGING_DOMAIN} {
+  reverse_proxy admin:3002
+}
+
+# Tenant + custom-domain traffic. Caddy asks the API before issuing a
+# certificate; the API only approves verified domains and known platform hosts.
+https:// {
+  tls {
+    on_demand
+  }
+  reverse_proxy api:4000
+}
+
+:80 {
+  redir https://{host}{uri} 308
+}

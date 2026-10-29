@@ -80,6 +80,38 @@
 | View connection status | ❌ | ✅ | ✅ |
 | Create refund | ❌ | ❌ | ✅ (OWNER/ADMIN) |
 
+## Operaciones sobre Domains
+
+| Operación | CLIENT member | DEVELOPER+ |
+|-----------|--------------|------------|
+| List domains (propio sitio) | 🔶 solo su sitio | ✅ |
+| Register domain | ❌ | ✅ |
+| Verify/check domain | ❌ | ✅ |
+| Delete domain | ❌ | ✅ |
+
+## Operaciones sobre GitHub
+
+| Operación | CLIENT member | DEVELOPER | ADMIN/OWNER |
+|-----------|--------------|-----------|-------------|
+| List connections (propio sitio) | 🔶 solo su sitio | ✅ | ✅ |
+| Connect repository | ❌ | ✅ | ✅ |
+| Disconnect repository | ❌ | ✅ | ✅ |
+| List installation repositories | ❌ | ✅ | ✅ |
+
+## Operaciones sobre API Tokens
+
+| Operación | CLIENT member | DEVELOPER | ADMIN/OWNER | API token |
+|-----------|--------------|-----------|-------------|-----------|
+| List tokens | ❌ | ❌ | ✅ | ❌ |
+| Create token | ❌ | ❌ | ✅ | ❌ |
+| Revoke token | ❌ | ❌ | ✅ | ❌ |
+| Use token (own workspace, scope) | N/A | N/A | N/A | 🔶 |
+
+Un API token nunca puede administrar tokens, acceder a `/admin`, aceptar
+invitaciones, crear workspaces ni usar endpoints de instalación GitHub. Su
+path guard limita a `GET /auth/me`, `GET /workspaces` y su propio
+`/workspaces/:workspaceId/...`; `read` cubre GET y `write` cubre mutaciones.
+
 ## System-level (scheduled jobs / workers)
 
 | Operación | Restricción |

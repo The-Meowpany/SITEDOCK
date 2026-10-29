@@ -1,29 +1,24 @@
-# ── SiteDock Dashboard (developer console) ───────────────────
-FROM node:20-slim AS base
+FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
+RUN npm ci --include=dev
+COPY . .
+ENV NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_PUBLIC_GITHUB_APP_SLUG
+ENV NEXT_PUBLIC_GITHUB_APP_SLUG=$NEXT_PUBLIC_GITHUB_APP_SLUG
+RUN npm run build -w apps/dashboard
 
-FROM base AS deps
-RUN npm ci --ignore-scripts
-
-FROM base AS build
-COPY packages/ packages/
-COPY apps/ apps/
-COPY tsconfig.base.json ./
-RUN npx prisma generate --schema packages/database/prisma/schema.prisma \
-  && npm run build -w apps/dashboard
-
-FROM node:20-slim AS runtime
+FROM node:20-alpine AS runner
 WORKDIR /app
-RUN groupadd -r sitedock && useradd -r -g sitedock sitedock
-
-COPY --from=build /app/apps/dashboard/.next/standalone ./
-COPY --from=build /app/apps/dashboard/.next/static ./apps/dashboard/.next/static
-COPY --from=build /app/apps/dashboard/public ./apps/dashboard/public
-
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3001
+RUN addgroup --system --gid 1001 sitedock && \
+    adduser --system --uid 1001 sitedock
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/dashboard/.next ./apps/dashboard/.next
+COPY --from=builder /app/apps/dashboard/package.json ./apps/dashboard/package.json
+COPY --from=builder /app/apps/dashboard/public ./apps/dashboard/public
 USER sitedock
 EXPOSE 3001
-
-ENV PORT=3001 HOSTNAME=0.0.0.0
-
-CMD ["node", "apps/dashboard/server.js"]
+CMD ["node", "apps/dashboard/.next/standalone/server.js"]

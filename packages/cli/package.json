@@ -1,0 +1,12 @@
+{
+  "name": "@sitedock/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "sitedock": "./bin/sitedock.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

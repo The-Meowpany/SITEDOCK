@@ -1,0 +1,82 @@
+# ───────────────────────── SiteDock production ingress ─────────────────────────
+# All hostnames are environment-driven:
+#   SITEDOCK_BASE_DOMAIN  e.g. sitedock.us.ci
+#   ACME_EMAIL            ACME account contact
+#   TLS_ASK_SECRET        shared secret for the API's on-demand TLS policy
+#
+# Control-plane hosts are fixed labels under the base domain. Every other
+# hostname (services, static sites, previews and verified custom domains) is
+# served by the catch-all block through the API, which performs authoritative
+# host → tenant routing. Caddy obtains certificates on demand and asks the API
+# whether the hostname is allowed before hitting Let's Encrypt.
+
+{
+  email {$ACME_EMAIL}
+  on_demand_tls {
+    ask http://api:4000/internal/tls/ask?secret={$TLS_ASK_SECRET}
+    interval 2m
+    burst 20
+  }
+}
+
+(security_headers) {
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    -Server
+  }
+}
+
+(api_proxy) {
+  reverse_proxy api:4000 {
+    header_up Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
+    header_up X-Forwarded-Proto {scheme}
+    health_uri /health/live
+    health_interval 15s
+  }
+}
+
+api.{$SITEDOCK_BASE_DOMAIN} {
+  import security_headers
+  import api_proxy
+}
+
+portal.{$SITEDOCK_BASE_DOMAIN} {
+  import security_headers
+  reverse_proxy web:3000 {
+    header_up Host {host}
+  }
+}
+
+dashboard.{$SITEDOCK_BASE_DOMAIN} {
+  import security_headers
+  reverse_proxy dashboard:3001 {
+    header_up Host {host}
+  }
+}
+
+admin.{$SITEDOCK_BASE_DOMAIN} {
+  import security_headers
+  reverse_proxy admin:3002 {
+    header_up Host {host}
+  }
+}
+
+# Tenant catch-all: services, static websites, previews and custom domains.
+# The API validates the Host header and proxies to the active runtime or
+# serves the published static site; unknown hosts return 404.
+https:// {
+  tls {
+    on_demand
+  }
+  import security_headers
+  import api_proxy
+}
+
+:80 {
+  redir https://{host}{uri} 308
+}

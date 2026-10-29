@@ -85,9 +85,9 @@ servicePlanRouter.use(requireSession);
 
 servicePlanRouter.post<WorkspaceParams>("/", async (req, res, next) => {
   try {
-    await assertWorkspaceAccess.execute({ workspaceId: req.params.workspaceId, userId: req.userId!, requiredRoles: ["OWNER", "ADMIN", "DEVELOPER"] });
-    const body = createPlanSchema.parse(req.body);
-    const result = await createServicePlan.execute({ workspaceId: req.params.workspaceId, ...body });
+        await assertWorkspaceAccess.execute({ workspaceId: req.params.workspaceId as string, userId: req.userId!, requiredRoles: ["OWNER", "ADMIN", "DEVELOPER"] });
+        const body = createPlanSchema.parse(req.body);
+    const result = await createServicePlan.execute({ workspaceId: req.params.workspaceId as string, ...body });
     auditBestEffort({ workspaceId: req.params.workspaceId, actorId: req.userId!, action: "PLAN_CREATED", resourceType: "ServicePlan", resourceId: result.planId });
     res.status(201).json(result);
   } catch (err) {

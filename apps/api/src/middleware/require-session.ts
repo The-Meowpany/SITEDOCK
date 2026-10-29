@@ -13,6 +13,14 @@ declare global {
       userId?: string;
       /** Correlation id for structured logs — set by apps/api/src/app.ts. */
       requestId?: string;
+      session?: {
+        githubToken?: string;
+      };
+      apiToken?: {
+        id: string;
+        workspaceId: string;
+        scopes: string[];
+      };
     }
   }
 }
@@ -31,6 +39,11 @@ function hashToken(token: string): string {
  * workspace query — and it is the price of fail-closed authorization.
  */
 export async function requireSession(req: Request, _res: Response, next: NextFunction) {
+  if (req.apiToken) {
+    next();
+    return;
+  }
+
   const token = req.cookies?.sid;
   if (!token) {
     next(new UnauthorizedError("Not authenticated"));

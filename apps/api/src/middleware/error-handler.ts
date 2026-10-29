@@ -9,6 +9,7 @@ const STATUS_BY_CODE: Record<string, number> = {
   FORBIDDEN: 403,
   CONFLICT: 409,
   INVALID_STATE_TRANSITION: 409,
+  SECRETS_KEY_NOT_CONFIGURED: 503,
 };
 
 /**

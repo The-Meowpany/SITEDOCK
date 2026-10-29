@@ -13,6 +13,27 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      # Disposable PostgreSQL for database-backed integration tests.
+      # A dedicated `sitedock_ci` database is created per run; the verify job
+      # never touches development or production data.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sitedock_ci
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_CI_PASSWORD || 'postgres' }}
+          POSTGRES_DB: sitedock_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Targets a dedicated schema (`sitedock_test`) inside a CI-only database.
+      # Never the `public` schema, never development/production data.
+      SITEDOCK_TEST_DATABASE_URL: postgresql://sitedock_ci:${{ secrets.POSTGRES_CI_PASSWORD || 'postgres' }}@localhost:5432/sitedock_ci?schema=sitedock_test
     steps:
       # Acciones pineadas a SHA inmutables para prevenir supply-chain attacks.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -28,15 +49,72 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate -w packages/database
 
+      - name: Provision disposable test database
+        run: npm run db:test:setup
+
       - name: Lint
         run: npm run lint
 
       - name: Typecheck
         run: npm run typecheck
 
-      # Domain tests use in-memory fakes — no database required.
-      - name: Unit tests
+      # Runs integration suites against the disposable test database, including
+      # preview deployment, worker concurrency/stale-lease, service mappings,
+      # database safety boundary, and the remaining unit-test suites.
+      - name: Unit and integration tests
         run: npm test
 
       - name: Build all apps
         run: npm run build --workspaces --if-present
+
+  # Greenfield bootstrap: a database that contains nothing but the tracked
+  # migrations must be usable, and the result must match schema.prisma exactly.
+  # The job provisions its own throwaway databases on the service below; it
+  # never touches the CI "verify" job or any existing schema.
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SITEDOCK_MIGRATION_TEST_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c448fc0a10 # v4.2.0
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate -w packages/database
+
+      # Proves the verifier refuses unsafe targets (public schema, missing or
+      # ambiguous target, namespace it does not own) before any mutation.
+      - name: Migration verification safety self-test
+        run: npm run db:migrate:verify -- --self-test
+
+      # Two independent empty databases, `prisma migrate deploy` only, then
+      # migrate status + schema diff must both be clean and identical.
+      - name: Greenfield migration reproducibility
+        run: npm run db:migrate:verify -- --repeat 2 --database
+
+      # Rebuilds the observed existing-installation state (0001-0013 with a
+      # zero-step 0012 record) in a throwaway database and proves the tracked
+      # migrations reconcile it without changing a single row.
+      - name: Existing installation reconciliation
+        run: npm run db:migrate:verify:existing

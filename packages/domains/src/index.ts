@@ -5,3 +5,7 @@ export * from "./application/domain.use-cases";
 export * from "./application/renew-expiring-certificates.use-case";
 export * from "./infrastructure/mock-domain.provider";
 export * from "./infrastructure/prisma-custom-domain.repository";
+export * from "./infrastructure/dnshe.client";
+export * from "./infrastructure/dnshe-domain.provider";
+export * from "./infrastructure/dns-resolver";
+export * from "./infrastructure/tls-probe";

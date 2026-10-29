@@ -8,6 +8,12 @@
 Todas las rutas excepto las marcadas como PUBLIC requieren una cookie de sesión (`sid`).
 La sesión se obtiene mediante login y se invalida con logout o suspensión.
 
+También se acepta `Authorization: Bearer sitedock_pat_...` para API tokens de workspace.
+Los tokens solo pueden operar dentro de su propio workspace (`/workspaces/:workspaceId/...`),
+no pueden administrar tokens, acceder a `/admin`, aceptar invitaciones ni crear workspaces.
+Los scopes son `read` (GET) y `write` (POST/PATCH/DELETE). `GET /auth/me` y `GET /workspaces`
+(limitado al workspace del token) son las únicas rutas no scoped.
+
 ---
 
 ## Auth
@@ -168,13 +174,43 @@ Montado en `/websites/:websiteId/maintenance-requests`.
 
 ## Domains
 
-Montado en `/websites/:websiteId/domains`.
+Montado en `/workspaces/:workspaceId/websites/:websiteId/domains`.
 
-| Método | Roles | Descripción |
-|--------|-------|-------------|
-| POST | staff | Registra dominio custom + inicia verificación |
-| GET | assertWebsiteAccess | Lista dominios del sitio |
-| POST | staff | Verifica ownership vía DomainProvider |
+| Método | Ruta | Roles | Descripción |
+|--------|------|-------|-------------|
+| GET | `/` | cualquier miembro | Lista dominios, estado DNS/SSL y provider |
+| POST | `/` | OWNER/ADMIN/DEVELOPER | Registra `{ hostname, serviceId?, autoManage? }` |
+| POST | `/:domainId/verify` | OWNER/ADMIN/DEVELOPER | Verifica TXT + routing + TLS |
+| POST | `/:domainId/check` | OWNER/ADMIN/DEVELOPER | Re-chequea DNS, routing y certificado |
+| DELETE | `/:domainId` | OWNER/ADMIN/DEVELOPER | Desconecta y limpia el registro del provider |
+
+## GitHub
+
+Webhook montado en `/github/webhook`; es público y valida la firma HMAC.
+
+| Método | Ruta | Roles | Descripción |
+|--------|------|-------|-------------|
+| POST | `/github/webhook` | público, firma HMAC | Push/PR → deployment de servicio o preview |
+
+Conexiones por sitio, montadas en
+`/workspaces/:workspaceId/websites/:websiteId/github`:
+
+| Método | Ruta | Roles | Descripción |
+|--------|------|-------|-------------|
+| GET | `/` | cualquier miembro | Lista conexiones del sitio |
+| GET | `/repositories?installationId=` | OWNER/ADMIN/DEVELOPER | Lista repositorios de la instalación |
+| POST | `/` | OWNER/ADMIN/DEVELOPER | Conecta `{ installationId, repositoryId, repositoryFullName, serviceId? }` |
+| DELETE | `/:connectionId` | OWNER/ADMIN/DEVELOPER | Desconecta repositorio |
+
+## API Tokens
+
+Montado en `/workspaces/:workspaceId/api-tokens`. Solo sesión, nunca API token.
+
+| Método | Ruta | Roles | Descripción |
+|--------|------|-------|-------------|
+| GET | `/` | OWNER/ADMIN | Lista tokens (sin hash ni secreto) |
+| POST | `/` | OWNER/ADMIN | Crea `{ name, scopes, expiresAt? }` y devuelve el token una vez |
+| DELETE | `/:tokenId` | OWNER/ADMIN | Revoca token |
 
 ## Merchant (Stripe Connect)
 
@@ -225,6 +261,15 @@ Montado en `/admin`. Doble gate: requireSession + requirePlatformAdmin.
 | GET | `/payments` | Pagos recientes |
 | GET | `/webhook-events` | Ledger de eventos webhook |
 | GET | `/reconciliation` | Excepciones de reconciliación |
+
+## Admin DNSHE
+
+Montado en `/admin/dns`. Requiere PLATFORM_ADMIN.
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/status` | Estado de credenciales, zona y registros DNS |
+| POST | `/provision-base` | Asegura `@`/`*` A; `{ publicIp?, apply? }`, dry-run por defecto |
 
 ## Webhooks (público, firma verificada)
 

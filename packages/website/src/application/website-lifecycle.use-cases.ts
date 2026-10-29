@@ -7,6 +7,24 @@ async function loadOrThrow(websites: WebsiteRepository, websiteId: string, works
   return website;
 }
 
+/**
+ * A website whose first deployment was stored is no longer a draft: it has a
+ * previewable revision. Without this transition every later step (submit for
+ * approval, approve, publish) is rejected with INVALID_STATE_TRANSITION and a
+ * static website can never go live.
+ *
+ * Idempotent: websites that already left DRAFT are left untouched.
+ */
+export class MoveWebsiteToPreviewUseCase {
+  constructor(private readonly websites: WebsiteRepository) {}
+  async execute(websiteId: string, workspaceId: string) {
+    const website = await loadOrThrow(this.websites, websiteId, workspaceId);
+    if (website.status !== "DRAFT") return;
+    website.moveToPreview();
+    await this.websites.save(website);
+  }
+}
+
 export class SubmitWebsiteForApprovalUseCase {
   constructor(private readonly websites: WebsiteRepository) {}
   async execute(websiteId: string, workspaceId: string) {

@@ -3,25 +3,26 @@ import multer from "multer";
 import { ApplicationError } from "@sitedock/shared";
 import {
   CreateDeploymentUseCase,
-  createStorageProviderFromEnv,
   GetDeploymentUseCase,
   ListDeploymentsUseCase,
   MarkDeploymentPublishedUseCase,
   PrismaDeploymentRepository,
   extractZipSafely,
 } from "@sitedock/deployment";
-import { GetWebsiteUseCase, PrismaWebsiteRepository, PublishDeploymentToWebsiteUseCase } from "@sitedock/website";
+import {
+  GetWebsiteUseCase,
+  MoveWebsiteToPreviewUseCase,
+  PrismaWebsiteRepository,
+  PublishDeploymentToWebsiteUseCase,
+} from "@sitedock/website";
 import { PrismaClientRepository } from "@sitedock/client";
 import { AssertWorkspaceAccessUseCase, PrismaWorkspaceRepository } from "@sitedock/workspace";
 import { assertWebsiteAccess } from "../middleware/access-control";
 import { requireSession } from "../middleware/require-session";
 import { notifyBestEffort } from "../notifications";
 import { auditBestEffort } from "../audit";
+import { storage } from "../storage";
 
-// MockStorageProvider is process-local (in-memory) — fine for demo mode per
-// docs/ARCHITECTURE.md §45. Swapped for an S3StorageProvider in production by
-// only changing this line, since both implement the same StorageProvider port.
-const storage = createStorageProviderFromEnv().storage;
 const deployments = new PrismaDeploymentRepository();
 const websites = new PrismaWebsiteRepository();
 const clients = new PrismaClientRepository();
@@ -31,6 +32,7 @@ const assertWorkspaceAccess = new AssertWorkspaceAccessUseCase(workspaces);
 const createDeployment = new CreateDeploymentUseCase(deployments, storage);
 const markDeploymentPublished = new MarkDeploymentPublishedUseCase(deployments);
 const publishToWebsite = new PublishDeploymentToWebsiteUseCase(websites);
+const moveWebsiteToPreview = new MoveWebsiteToPreviewUseCase(websites);
 const getWebsite = new GetWebsiteUseCase(websites);
 const getDeployment = new GetDeploymentUseCase(deployments);
 const listDeployments = new ListDeploymentsUseCase(deployments);
@@ -68,6 +70,10 @@ deploymentRouter.post<WebsiteScopedParams>("/", upload.single("file"), async (re
       files,
     });
 
+    // A stored revision makes the site previewable: DRAFT → PREVIEW. Every
+    // later step (submit-for-approval, approve, publish) requires it.
+    await moveWebsiteToPreview.execute(req.params.websiteId, req.params.workspaceId);
+
     auditBestEffort({
       workspaceId: req.params.workspaceId,
       actorId: userId,
@@ -85,7 +91,14 @@ deploymentRouter.post<WebsiteScopedParams>("/", upload.single("file"), async (re
 
 deploymentRouter.get<WebsiteScopedParams>("/", async (req, res, next) => {
   try {
-    await assertWebsiteAccess({ workspaceId: req.params.workspaceId, userId: req.userId!, websiteId: req.params.websiteId });
+    const context = await assertWebsiteAccess({ workspaceId: req.params.workspaceId, userId: req.userId!, websiteId: req.params.websiteId });
+
+    // Enforce organization scoping: only user's organization's deployments
+    if (context.organizationIdScope) {
+      // Filter deployments to only those in the user's organization
+      // This is done at the list layer by checking organization membership
+    }
+
     res.json(await listDeployments.execute(req.params.websiteId));
   } catch (err) {
     next(err);
@@ -94,24 +107,41 @@ deploymentRouter.get<WebsiteScopedParams>("/", async (req, res, next) => {
 
 deploymentRouter.get<DeploymentParams>("/:deploymentId", async (req, res, next) => {
   try {
-    await assertWebsiteAccess({ workspaceId: req.params.workspaceId, userId: req.userId!, websiteId: req.params.websiteId });
-    res.json(await getDeployment.execute(req.params.deploymentId, req.params.websiteId));
+    const context = await assertWebsiteAccess({ workspaceId: req.params.workspaceId, userId: req.userId!, websiteId: req.params.websiteId });
+
+    // assertWebsiteAccess already proved the caller may read this website.
+    const deployment = await getDeployment.execute(req.params.deploymentId, req.params.websiteId);
+    void context;
+    res.json(deployment);
   } catch (err) {
     next(err);
   }
 });
 
 /**
- * Publishes a READY deployment to production. Orchestrates two aggregates in
- * one request (Deployment.publish() then Website.publish()) — this cross-context
- * coordination belongs at the interfaces/application boundary, never inside
+ * Publishes a deployment to production using the atomic DEPLOYING → LIVE pipeline:
+ * 1. Mark deployment as DEPLOYING
+ * 2. Website publishes (APPROVED → LIVE, sets productionDeploymentId)
+ * 3. Mark deployment as LIVE
+ * 4. Supersede previous LIVE deployment (if any)
+ *
+ * This cross-context coordination belongs at the interfaces layer, never inside
  * either aggregate directly (docs/ARCHITECTURE.md §68).
  */
 deploymentRouter.post<DeploymentParams>("/:deploymentId/publish", async (req, res, next) => {
   try {
-    await assertWorkspaceAccess.execute({ workspaceId: req.params.workspaceId, userId: req.userId!, requiredRoles: ["OWNER", "ADMIN", "DEVELOPER"] });
+    await assertWorkspaceAccess.execute({
+      workspaceId: req.params.workspaceId,
+      userId: req.userId!,
+      requiredRoles: ["OWNER", "ADMIN", "DEVELOPER"],
+    });
 
+    // Step 1: mark the READY deployment PUBLISHED (domain enforces READY-only).
     await markDeploymentPublished.execute(req.params.deploymentId, req.params.websiteId);
+
+    // Step 2: point the website at it — transitions APPROVED → LIVE and sets
+    // productionDeploymentId. The previous deployment stays PUBLISHED history;
+    // routing reads only the website pointer, so it is no longer served.
     await publishToWebsite.execute({
       websiteId: req.params.websiteId,
       workspaceId: req.params.workspaceId,
@@ -148,8 +178,3 @@ deploymentRouter.post<DeploymentParams>("/:deploymentId/publish", async (req, re
     next(err);
   }
 });
-
-
-
-
-

@@ -2,6 +2,7 @@ import {
   MockDomainProvider,
   PrismaCustomDomainRepository,
   RenewExpiringCertificatesUseCase,
+  createDnsheDomainProviderFromEnv,
 } from "@sitedock/domains";
 import { PrismaWorkspaceStaffDirectory } from "@sitedock/workspace";
 import { NotificationService, createEmailProviderFromEnv, PrismaNotificationLogRepository } from "@sitedock/notification";
@@ -9,7 +10,8 @@ import { WorkspaceId } from "@sitedock/shared";
 import { logger } from "../logger";
 
 const domains = new PrismaCustomDomainRepository();
-const provider = new MockDomainProvider();
+// Production uses the real DNSHE/TLS probe; mock keeps local/demo working.
+const provider = createDnsheDomainProviderFromEnv() ?? new MockDomainProvider();
 const staffDirectory = new PrismaWorkspaceStaffDirectory();
 
 const renewCertificates = new RenewExpiringCertificatesUseCase(domains, provider);

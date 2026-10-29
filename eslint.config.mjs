@@ -17,9 +17,19 @@ export default tseslint.config(
       "apps/web/next-env.d.ts",
       "apps/dashboard/next-env.d.ts",
       "apps/admin/next-env.d.ts",
+      "backups/**",
     ],
   },
   ...tseslint.configs.recommended,
+  {
+    // The reference application under samples/ is deliberately a minimal
+    // CommonJS Node script shipped inside its Docker image (no build step),
+    // so `require()` is intentional there.
+    files: ["samples/**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
   {
     rules: {
       "@typescript-eslint/no-unused-vars": [

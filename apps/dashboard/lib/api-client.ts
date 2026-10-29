@@ -41,9 +41,90 @@ export interface WebsiteSummary {
   name: string;
   subdomain: string;
   status: WebsiteStatus;
+  projectId?: string;
   clientId: string | null;
   /** Deployment actualmente publicado — undefined en listados viejos. */
   productionDeploymentId?: string | null;
+}
+
+export type DomainStatus = "PENDING" | "VERIFYING" | "VERIFIED" | "FAILED";
+export type DnsRecordType = "TXT" | "CNAME" | "A";
+
+export interface DomainInstructions {
+  recordType: DnsRecordType;
+  recordName: string;
+  recordValue: string;
+  ttl: number;
+}
+
+export interface DomainDetail {
+  id: string;
+  hostname: string;
+  status: DomainStatus;
+  serviceId: string | null;
+  verifiedAt: string | null;
+  sslIssuedAt: string | null;
+  sslExpiresAt: string | null;
+  sslStatus: "NONE" | "PENDING" | "ISSUED" | "FAILED";
+  sslError: string | null;
+  routingOk: boolean;
+  routingCheckedAt: string | null;
+  routingObserved: string[];
+  lastError: string | null;
+  provider: string;
+  autoManaged: boolean;
+  dnsRecord: { type: string | null; name: string | null; value: string | null };
+  instructions: DomainInstructions | null;
+}
+
+export interface DomainListResponse {
+  provider: string;
+  managed: boolean;
+  domains: DomainDetail[];
+}
+
+export interface ServiceSummary {
+  id: string;
+  projectId: string;
+  name: string;
+  type: string;
+  status: string;
+  hostname: string;
+  activeDeploymentId: string | null;
+}
+
+export interface GitHubRepository {
+  id: string;
+  name: string;
+  fullName: string;
+  private: boolean;
+}
+
+export interface GitHubConnection {
+  id: string;
+  installationId: string;
+  repositoryId: string;
+  repositoryName: string;
+  repositoryFullName: string;
+  defaultBranch: string;
+  serviceId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiTokenSummary {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreatedApiToken extends ApiTokenSummary {
+  token: string;
 }
 
 export interface ProjectSummary {
@@ -178,6 +259,24 @@ export const api = {
   getDashboard: (workspaceId: string) =>
     request<DashboardData>(`/api/v1/workspaces/${workspaceId}/dashboard`),
 
+  // ── API tokens ───────────────────────────────────────────
+  listApiTokens: (workspaceId: string) =>
+    request<ApiTokenSummary[]>(`/api/v1/workspaces/${workspaceId}/api-tokens`),
+
+  createApiToken: (
+    workspaceId: string,
+    input: { name: string; scopes?: Array<"read" | "write">; expiresAt?: string }
+  ) =>
+    request<CreatedApiToken>(`/api/v1/workspaces/${workspaceId}/api-tokens`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  revokeApiToken: (workspaceId: string, tokenId: string) =>
+    request<void>(`/api/v1/workspaces/${workspaceId}/api-tokens/${tokenId}`, {
+      method: "DELETE",
+    }),
+
   // ── Proyectos y sitios ───────────────────────────────────
   listProjects: (workspaceId: string) =>
     request<ProjectSummary[]>(`/api/v1/workspaces/${workspaceId}/projects`),
@@ -213,6 +312,98 @@ export const api = {
     }),
 
   // ── Deployments ──────────────────────────────────────────
+  listDomains: (workspaceId: string, websiteId: string) =>
+    request<DomainListResponse>(
+      `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/domains`
+    ),
+
+  registerDomain: (
+    workspaceId: string,
+    websiteId: string,
+    hostname: string,
+    options: { serviceId?: string | null; autoManage?: boolean } = {}
+  ) =>
+    request<{
+      domainId: string;
+      hostname: string;
+      status: DomainStatus;
+      provider: string;
+      recordName: string;
+      recordValue: string;
+      routing: DomainInstructions | null;
+      autoManaged: boolean;
+    }>(`/api/v1/workspaces/${workspaceId}/websites/${websiteId}/domains`, {
+      method: "POST",
+      body: JSON.stringify({ hostname, ...options }),
+    }),
+
+  verifyDomain: (workspaceId: string, websiteId: string, domainId: string) =>
+    request<{
+      verified: boolean;
+      routingOk: boolean;
+      sslStatus: string;
+      sslExpiresAt: string | null;
+      message: string | null;
+    }>(
+      `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/domains/${domainId}/verify`,
+      { method: "POST", body: "{}" }
+    ),
+
+  checkDomain: (workspaceId: string, websiteId: string, domainId: string) =>
+    request<{
+      verified: boolean;
+      routingOk: boolean;
+      sslStatus: string;
+      sslExpiresAt: string | null;
+      message: string | null;
+    }>(
+      `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/domains/${domainId}/check`,
+      { method: "POST", body: "{}" }
+    ),
+
+  deleteDomain: (workspaceId: string, websiteId: string, domainId: string) =>
+    request<void>(
+      `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/domains/${domainId}`,
+      { method: "DELETE" }
+    ),
+
+  listServices: (workspaceId: string, projectId: string) =>
+    request<ServiceSummary[]>(
+      `/api/v1/workspaces/${workspaceId}/services?projectId=${encodeURIComponent(projectId)}`
+    ),
+
+  listGitHubRepositories: (workspaceId: string, websiteId: string, installationId: string) =>
+    request<{ installationId: string; repositories: GitHubRepository[] }>(
+      `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/github/repositories?installationId=${encodeURIComponent(installationId)}`
+    ),
+
+  listGitHubConnections: (workspaceId: string, websiteId: string) =>
+    request<GitHubConnection[]>(
+      `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/github`
+    ),
+
+  connectGitHub: (
+    workspaceId: string,
+    websiteId: string,
+    input: {
+      installationId: string;
+      repositoryId: string;
+      repositoryFullName: string;
+      defaultBranch?: string;
+      serviceId?: string | null;
+    }
+  ) =>
+    request<GitHubConnection>(
+      `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/github`,
+      { method: "POST", body: JSON.stringify(input) }
+    ),
+
+  disconnectGitHub: (workspaceId: string, websiteId: string, connectionId: string) =>
+    request<void>(
+      `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/github/${connectionId}`,
+      { method: "DELETE" }
+    ),
+
   listDeployments: (workspaceId: string, websiteId: string) =>
     request<DeploymentSummary[]>(
       `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/deployments`

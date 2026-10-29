@@ -51,6 +51,7 @@ export class GetWebsiteUseCase {
       name: website.name,
       subdomain: website.subdomain,
       status: website.status,
+      projectId: website.projectId,
       productionDeploymentId: website.productionDeploymentId,
       clientId: website.clientId,
     };

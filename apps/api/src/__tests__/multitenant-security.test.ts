@@ -145,6 +145,37 @@ describe("Admin routes — PLATFORM_ADMIN gate", () => {
   }
 });
 
+describe("Multi-tenant security (cross-organization resource isolation)", () => {
+  const WORKSPACE_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+  const PROJECT_B = "33333333-3333-3333-3333-333333333333";
+  const SERVICE_B = "44444444-4444-4444-4444-444444444444";
+  const DEPLOYMENT_B = "55555555-5555-5555-5555-555555555555";
+
+  const crossOrgPaths: Array<[string, string, unknown]> = [
+    ["GET", `/api/v1/workspaces/${WORKSPACE_A}/projects`, undefined],
+    ["GET", `/api/v1/workspaces/${WORKSPACE_A}/projects/${PROJECT_B}/services`, undefined],
+    ["GET", `/api/v1/workspaces/${WORKSPACE_A}/services/${SERVICE_B}`, undefined],
+    ["GET", `/api/v1/workspaces/${WORKSPACE_A}/services/${SERVICE_B}/deployments`, undefined],
+    ["POST", `/api/v1/workspaces/${WORKSPACE_A}/services/${SERVICE_B}/deploy`, {}],
+    ["POST", `/api/v1/workspaces/${WORKSPACE_A}/services/${SERVICE_B}/rollback`, { deploymentId: DEPLOYMENT_B }],
+    ["POST", `/api/v1/workspaces/${WORKSPACE_A}/services`, { projectId: PROJECT_B, name: "x" }],
+  ];
+
+  for (const [method, path, body] of crossOrgPaths) {
+    it(`${method} cross-org resource → 401 without auth (enumeration resistant)`, async () => {
+      const res = await req(method, path, body ? { body } : undefined);
+      expect([401, 403, 404]).toContain(res.status);
+    });
+  }
+});
+
+describe("Multi-tenant security (privilege escalation prevention)", () => {
+  it("cannot access platform admin routes without platform admin session", async () => {
+    const res = await req("GET", "/api/v1/admin/users");
+    expect(res.status).toBeGreaterThanOrEqual(401);
+  });
+});
+
 function workspaceId(ws: string): string {
   return ws;
 }

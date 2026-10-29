@@ -52,7 +52,7 @@ workspaceRouter.post("/", async (req, res, next) => {
 workspaceRouter.get("/", async (req, res, next) => {
   try {
     const result = await listMyWorkspaces.execute(req.userId!);
-    res.json(result);
+    res.json(req.apiToken ? result.filter((workspace) => workspace.id === req.apiToken!.workspaceId) : result);
   } catch (err) {
     next(err);
   }

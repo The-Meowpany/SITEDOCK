@@ -1,8 +1,14 @@
 node_modules/
 dist/
 .env
+.runtime-agent-token
 *.log
 .next/
 tsconfig.tsbuildinfo
 packages/database/prisma/generated/
+.data/
 apps/*/.env.local
+backups/
+*.crt
+*.key
+docker-compose.override.yml

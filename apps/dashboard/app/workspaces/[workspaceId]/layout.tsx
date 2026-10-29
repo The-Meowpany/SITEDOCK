@@ -9,6 +9,7 @@ const NAV = [
   { href: "", label: "Resumen" },
   { href: "/sitios", label: "Sitios" },
   { href: "/planes", label: "Planes y tiers" },
+  { href: "/settings", label: "Settings" },
 ];
 
 /**

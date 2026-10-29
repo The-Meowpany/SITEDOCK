@@ -37,6 +37,7 @@ export class PrismaConnectedAccountRepository implements ConnectedAccountReposit
 
   async save(account: ConnectedAccountRecord): Promise<void> {
     const data = {
+      id: account.id,
       workspaceId: account.workspaceId,
       provider: account.provider,
       externalAccountId: account.externalAccountId,

@@ -1,0 +1,2 @@
+# Backups automáticos de SiteDock — ejecutar diario a las 02:00
+0 2 * * * /app/scripts/backup-postgres.sh >> /var/log/sitedock-backup.log 2>&1

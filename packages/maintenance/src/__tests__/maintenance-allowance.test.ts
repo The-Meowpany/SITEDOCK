@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { WebsiteId } from "@sitedock/shared";
 import { MaintenanceRequestRepository } from "../domain/ports";
 import { GetMaintenanceAllowanceForWebsiteUseCase } from "../application/maintenance-allowance.use-case";
+import { isWithinIncludedMaintenanceQuota } from "../domain/maintenance-coverage";
 
 const WEBSITE = WebsiteId("11111111-1111-1111-1111-111111111111");
 
@@ -43,5 +44,21 @@ describe("GetMaintenanceAllowanceForWebsiteUseCase", () => {
     const useCase = new GetMaintenanceAllowanceForWebsiteUseCase(new FakeRequestRepository(50));
     const unlimited = await useCase.execute({ websiteId: WEBSITE, quotaIncluded: null, ...PERIOD });
     expect(unlimited).toMatchObject({ quotaIncluded: null, remaining: null, overQuota: false, usedThisPeriod: 50 });
+  });
+});
+
+describe("isWithinIncludedMaintenanceQuota", () => {
+  it("covers the last included request after it has been counted", () => {
+    expect(isWithinIncludedMaintenanceQuota(1, 1)).toBe(true);
+    expect(isWithinIncludedMaintenanceQuota(2, 2)).toBe(true);
+  });
+
+  it("rejects the first request beyond a finite quota", () => {
+    expect(isWithinIncludedMaintenanceQuota(1, 2)).toBe(false);
+    expect(isWithinIncludedMaintenanceQuota(2, 3)).toBe(false);
+  });
+
+  it("treats a NULL quota as unlimited", () => {
+    expect(isWithinIncludedMaintenanceQuota(null, 500)).toBe(true);
   });
 });

@@ -8,6 +8,7 @@
 |-----------|-----------|---------------|
 | [README.md](../README.md) | Todos | Primera entrada: qué es SiteDock, stack, quick start |
 | [LOCAL_DEVELOPMENT.md](LOCAL_DEVELOPMENT.md) | Developers | Setup completo paso a paso + flujos manuales |
+| [FEATURE_INVENTORY.md](FEATURE_INVENTORY.md) | Todos | Estado real por funcionalidad y trabajo pendiente |
 
 ## Arquitectura y diseño
 

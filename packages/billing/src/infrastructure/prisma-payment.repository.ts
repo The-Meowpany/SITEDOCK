@@ -46,6 +46,7 @@ export class PrismaPaymentRepository implements PaymentRepository {
 
   async save(payment: Payment): Promise<void> {
     const data = {
+      id: payment.id,
       invoiceId: payment.invoiceId,
       amountCents: payment.amount.amountCents,
       currency: payment.amount.currency,

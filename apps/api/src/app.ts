@@ -10,6 +10,11 @@ import { logger } from "./logger";
 import { apiRateLimiter } from "./middleware/rate-limit";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
 import { authRouter } from "./interfaces/auth.routes";
+import { hostRoutingMiddleware } from "./middleware/host-routing";
+import { tlsAskRouter } from "./interfaces/tls-ask.routes";
+import { createPublicSitesRouter } from "./interfaces/public-sites.routes";
+import { PrismaWebsiteRepository } from "@sitedock/website";
+import { storage } from "./storage";
 import { workspaceRouter, invitationRouter } from "./interfaces/workspace.routes";
 import { clientRouter } from "./interfaces/client.routes";
 import { projectRouter, websiteRouter } from "./interfaces/website.routes";
@@ -27,8 +32,16 @@ import { servicePlanRouter, subscriptionRouter, demoPaymentRouter, paymentWebhoo
 import { maintenanceRouter } from "./interfaces/maintenance.routes";
 import { domainsRouter } from "./interfaces/domains.routes";
 import { auditRouter } from "./interfaces/audit.routes";
+import { adminDnsRouter } from "./interfaces/admin-dns.routes";
+import { githubConnectionsRouter } from "./interfaces/github-connections.routes";
 import { dashboardRouter } from "./interfaces/dashboard.routes";
 import { adminRouter } from "./interfaces/admin.routes";
+import { serviceRouter } from "./interfaces/service.routes";
+import { environmentRouter } from "./interfaces/environment.routes";
+import { githubRouter } from "@sitedock/github";
+import { requireSession } from "./middleware/require-session";
+import { apiTokensRouter } from "./interfaces/api-tokens.routes";
+import { authenticateApiToken, apiTokenPathGuard, apiTokenScopeGuard } from "./middleware/api-token-auth";
 
 export function createApp() {
   const app = express();
@@ -63,10 +76,22 @@ export function createApp() {
     paymentWebhookRouter
   );
 
-  app.use(express.json({ limit: "1mb" }));
+  // GitHub signs the exact raw webhook bytes; parse them before express.json().
+  app.use("/api/v1/github/webhook", express.raw({ type: "application/json", limit: "2mb" }));
+
+  // Caddy on-demand TLS policy endpoint. Mounted before host routing and the
+  // JSON parser; responses terminate here, so the shared secret in Caddy's
+  // ask URL never reaches the request logger.
+  app.use("/internal/tls", tlsAskRouter);
+  app.use(hostRoutingMiddleware);
+  app.use(express.json({ limit: "12mb" }));
   app.use(cookieParser());
   app.use(assignRequestId);
   app.use(pinoHttp({ logger, genReqId: (req) => req.requestId ?? randomUUID() }));
+
+
+
+
 
   // Liveness must never depend on the database (docs/ARCHITECTURE.md §health checks).
   app.get("/health/live", (_req, res) => res.status(200).json({ status: "ok" }));
@@ -80,19 +105,34 @@ export function createApp() {
     }
   });
 
+  // Public static website delivery — mounted outside /api/v1 so it is never
+  // behind auth gates or API rate limiting. Authorization is enforced by
+  // website status (LIVE only) + deployment publication state.
+  // Shares the same StorageProvider instance used by deployment uploads so
+  // uploaded files are publicly retrievable.
+  const websites = new PrismaWebsiteRepository();
+  app.use("/sites", createPublicSitesRouter(storage, websites));
+
   app.use("/api/v1/public", publicDemoRouter);
   app.use("/api/v1", apiRateLimiter);
+  app.use("/api/v1", authenticateApiToken);
+  app.use("/api/v1", apiTokenPathGuard);
+  app.use("/api/v1/workspaces/:workspaceId", apiTokenScopeGuard);
   app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/workspaces/:workspaceId/api-tokens", apiTokensRouter);
   app.use("/api/v1/workspaces", workspaceRouter);
   app.use("/api/v1/invitations", invitationRouter);
   app.use("/api/v1/workspaces/:workspaceId/clients", clientRouter);
   app.use("/api/v1/workspaces/:workspaceId/projects", projectRouter);
+  app.use("/api/v1/workspaces/:workspaceId/services", serviceRouter);
+  app.use("/api/v1/workspaces/:workspaceId/projects/:projectId/environments", environmentRouter);
   app.use("/api/v1/workspaces/:workspaceId/websites", websiteRouter);
   app.use("/api/v1/workspaces/:workspaceId/websites/:websiteId/deployments", deploymentRouter);
   app.use("/api/v1/workspaces/:workspaceId/websites/:websiteId/backups", backupsRouter);
   app.use("/api/v1/workspaces/:workspaceId/websites/:websiteId/charges", chargesRouter);
   app.use("/api/v1/workspaces/:workspaceId/websites/:websiteId/maintenance-requests", maintenanceRouter);
   app.use("/api/v1/workspaces/:workspaceId/websites/:websiteId/domains", domainsRouter);
+  app.use("/api/v1/workspaces/:workspaceId/websites/:websiteId/github", githubConnectionsRouter);
   app.use("/api/v1/workspaces/:workspaceId/plans", servicePlanRouter);
   app.use("/api/v1/workspaces/:workspaceId/websites/:websiteId/subscription", subscriptionRouter);
   if (config.allowDemoEndpoints) {
@@ -104,7 +144,18 @@ export function createApp() {
   app.use("/api/v1/workspaces/:workspaceId/payments", refundsRouter);
   app.use("/api/v1/admin/reconciliation", reconciliationRouter);
   app.use("/api/v1/admin/metrics", metricsAdminRouter);
+  app.use("/api/v1/admin/dns", adminDnsRouter);
   app.use("/api/v1/admin", adminRouter);
+
+  // GitHub App integration — mounted at /api/v1/github for OAuth, repository connection, and webhook handling
+  app.use(
+    "/api/v1/github",
+    (req, res, next) => {
+      if (req.path === "/webhook") return next();
+      return requireSession(req, res, next);
+    },
+    githubRouter
+  );
 
   app.use(notFoundHandler);
   app.use(errorHandler);

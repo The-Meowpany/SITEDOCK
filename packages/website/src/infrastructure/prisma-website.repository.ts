@@ -84,6 +84,9 @@ export class PrismaWebsiteRepository implements WebsiteRepository {
   }
 
   async save(website: Website): Promise<void> {
+    // Scalar foreign keys (not relation `connect`) are required here: once a
+    // relation field exists, Prisma's checked Create/Update inputs drop the
+    // scalar FK, so `clientId` is only valid on the Unchecked variants.
     await prisma.website.upsert({
       where: { id: website.id },
       create: {

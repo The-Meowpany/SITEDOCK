@@ -52,6 +52,22 @@ curl http://localhost:4000/health/live   # siempre 200 si el proceso vive
 curl http://localhost:4000/health/ready  # 200 si Postgres responde, 503 si no
 ```
 
+## Public website delivery
+
+Published static websites are served through `GET /public/sites/:subdomain/:path(*)`
+(proxied by Caddy at `http://<host>:80/sites/<subdomain>/` in local development).
+
+- Only websites with `status = LIVE` and a non-null `productionDeploymentId`
+  are served. All other statuses return 404.
+- Assets are fetched from the configured StorageProvider (mock in dev, S3 in prod)
+  at `websites/{websiteId}/deployments/{productionDeploymentId}/{path}`.
+- Unpublished deployments, backups, and internal metadata are never accessible
+  through this route.
+- Path traversal (`..`, absolute paths, null bytes) is rejected with 404.
+
+Example: a website with subdomain `mi-sitio` and published deployment `dep-1`
+serves `index.html` at `http://localhost:80/sites/mi-sitio/`.
+
 ## Métricas
 
 ```bash
@@ -115,6 +131,47 @@ Jobs incluidos:
 | notify-expiring-ssl-domains | 24 h | Renueva SSL + alerta si falla |
 | backup-live-websites | 1 h | Backup de sitios LIVE |
 | cleanup-expired-backups | 24 h | Elimina backups vencidos |
+
+## Runtime agent (service deployments)
+
+Los servicios (contenedores) no se construyen en el worker: éste llama al
+runtime agent, el único proceso con acceso a podman.
+
+```bash
+# 1. Host Linux con podman rootless. El usuario del agente necesita rangos
+#    subordinados, si no `podman run` falla con "no subuid ranges found".
+usermod --add-subuids 100000-165535 --add-subgids 100000-165535 <agent-user>
+podman system migrate
+grep <agent-user> /etc/subuid /etc/subgid   # debe mostrar el rango
+
+# 2. Variables (API y worker comparten estas dos):
+export RUNTIME_AGENT_URL=http://127.0.0.1:4010
+export RUNTIME_AGENT_TOKEN=$(openssl rand -hex 32)   # mínimo 32 caracteres
+
+# 3. Arranque del agente
+node apps/runtime-agent/agent.mjs
+
+# 4. Verificación (debe responder {"status":"ok","podman":"podman version ..."})
+curl -H "authorization: Bearer $RUNTIME_AGENT_TOKEN" http://127.0.0.1:4010/healthz
+```
+
+Diagnóstico rápido de un deployment:
+
+```bash
+# Estado del deployment y logs visibles al cliente
+curl -b cookies.txt "$API/workspaces/$WS/services/$SVC/deployments"
+curl -b cookies.txt "$API/workspaces/$WS/services/$SVC/logs"
+
+# Contenedores gestionados por SiteDock en el host del runtime
+podman ps -a --filter label=sitedock.managed=true
+```
+
+| Síntoma | Causa | Acción |
+|---------|-------|--------|
+| `RUNTIME_AGENT_UNAVAILABLE` | agente caído o token distinto entre API/worker | revisar el paso 4 |
+| `no subuid ranges found` | faltan rangos subordinados | comando `usermod` de arriba |
+| Deployment `QUEUED` con `attempts` creciendo | el build falla y reintenta (máx. 3) | leer `/logs` del servicio |
+| Servicio en `FAILED` | el primer build nunca llegó a producción | corregir Dockerfile y volver a desplegar |
 
 ## Secrets
 

@@ -157,7 +157,10 @@ async function main() {
       fullName: "Jane Dev",
     });
     must(r.status === 201, `registro: ${r.status} ${JSON.stringify(r.json)}`);
-    ok(`cuenta creada: ${email}`);
+    const login = await call("POST", "/auth/login", { email, password: "supersecret" });
+    must(login.status === 200, `login: ${login.status} ${JSON.stringify(login.json)}`);
+    must(cookie, "login no emitió cookie de sesión");
+    ok(`cuenta creada y sesión iniciada: ${email}`);
   }
 
   step("3 · Workspace");

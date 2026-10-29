@@ -63,15 +63,31 @@ Ver [DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md) para el mapa completo.
 
 ```bash
 cp .env.example .env
-docker compose up -d          # Postgres local
+# Edit .env for local development (defaults to mock providers — no external
+# credentials required for local dev).
+
+docker compose up -d          # PostgreSQL + API + worker + frontends + Caddy
+
 npm install
 npm run db:generate -w packages/database
-npm run db:migrate -w packages/database
-npm run dev                   # API :4000
+npm run db:deploy -w packages/database   # Apply migrations against real Postgres
+
+# Verify the stack:
+curl http://localhost:4000/health/live   # 200 {"status":"ok"}
+curl http://localhost:4000/health/ready  # 200 when Postgres is reachable
+
+npm run dev                   # API :4000 (hot reload)
 npm run dev -w apps/dashboard # Consola developer :3001 (opcional)
 npm run dev -w apps/web       # Portal cliente :3000 (opcional)
+
 npm run e2e                   # Flujo completo E2E contra stack local
 ```
+
+Public website delivery (M1+M2):
+- Uploaded ZIPs are stored via the configured StorageProvider (mock by default, S3 when `STORAGE_PROVIDER=s3`).
+- Published websites are served at `http://localhost:80/sites/<subdomain>/` through Caddy → API → private storage origin.
+- Only `LIVE` websites with a published deployment are served; all other statuses return 404.
+- Path traversal, symlinks, and dangerous file types are blocked at upload time.
 
 ## Testing
 
@@ -93,8 +109,11 @@ Ver [SECURITY.md](docs/SECURITY.md), [THREAT_MODEL.md](docs/THREAT_MODEL.md),
 |-------|--------|-----------|
 | Development | VERIFIED | 336 tests · lint 0 · typecheck 0 · builds OK |
 | Security | VERIFIED | 88+ tests de seguridad · H1-H5 corregidos con regresión |
-| PostgreSQL E2E | NOT VERIFIED | Requiere Postgres real |
+| PostgreSQL schema | IMPLEMENTED | Migration `0001_init` created from `schema.prisma` |
+| PostgreSQL E2E | NOT VERIFIED | Requiere Postgres real (`docker compose up -d`) |
 | Docker build | NOT VERIFIED | Requiere Docker daemon |
+| Public website serving | IMPLEMENTED | `/public/sites/:subdomain/:path(*)` route in API |
+| Public serving E2E | NOT VERIFIED | Requiere stack desplegado con Postgres + storage |
 | Stripe sandbox | IMPLEMENTED | Requiere credenciales sandbox |
 | S3 sandbox | IMPLEMENTED | Requiere bucket + credenciales |
 | Resend sandbox | IMPLEMENTED | Requiere API key + dominio verificado |
@@ -102,7 +121,8 @@ Ver [SECURITY.md](docs/SECURITY.md), [THREAT_MODEL.md](docs/THREAT_MODEL.md),
 
 ## Limitaciones actuales
 
-- Sin PostgreSQL real en este entorno: los repositorios Prisma nunca han
-  sido ejecutados contra una base real.
-- Providers reales implementados pero no verificados contra servicios live.
+- Sin PostgreSQL real en este entorno: los repositorios Prisma nunca han sido ejecutados contra una base real.
+- Docker no está disponible en este entorno de desarrollo: las imágenes no han sido construidas.
+- Providers reales (Stripe, S3, Resend) implementados pero no verificados contra servicios live.
+- Public website serving no verificado E2E: requiere stack completo corriendo.
 - White-label: branding básico implementado; dominios custom pendientes.

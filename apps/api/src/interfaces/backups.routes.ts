@@ -5,7 +5,6 @@ import {
   CreateWebsiteBackupUseCase,
   DEFAULT_BACKUP_RETENTION_DAYS,
   ListBackupsUseCase,
-  MockStorageProvider,
   PrismaDeploymentRepository,
   PrismaWebsiteBackupRepository,
   RestoreWebsiteBackupUseCase,
@@ -14,10 +13,12 @@ import { GetWebsiteUseCase, PrismaWebsiteRepository } from "@sitedock/website";
 import { assertWebsiteAccess } from "../middleware/access-control";
 import { requireSession } from "../middleware/require-session";
 import { auditBestEffort } from "../audit";
+import { storage } from "../storage";
 
-// Same demo-mode wiring pattern as deployment.routes.ts — swapped for an
-// S3StorageProvider in production without touching these routes.
-const storage = new MockStorageProvider();
+// Backups MUST use the same StorageProvider instance as deployment uploads:
+// with a per-router mock, a production S3 deployment would be backed up into
+// process memory and the restore would read from the wrong store (or lose the
+// data on restart).
 const deployments = new PrismaDeploymentRepository();
 const backups = new PrismaWebsiteBackupRepository();
 const getWebsite = new GetWebsiteUseCase(new PrismaWebsiteRepository());
