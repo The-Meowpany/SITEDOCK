@@ -3,20 +3,15 @@
  * Migration upgrade compatibility test - full upgrade path
  */
 
-import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 
-const require = createRequire(import.meta.url);
-const prismaCli = require.resolve('prisma/build/index.js');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dbDir = path.join(root, 'packages/database');
-const schemaPath = path.join(dbDir, 'prisma/schema.prisma');
 const migrationsDir = path.join(dbDir, 'prisma/migrations');
 
 const ADMIN_URL_ENV = process.env.SITEDOCK_MIGRATION_TEST_ADMIN_URL || process.env.SITEDOCK_TEST_DATABASE_URL;

@@ -56,6 +56,16 @@ if (schema === "public") {
 const target = `database "${database}", schema "${schema}"`;
 console.log(`[test-db] target ${target}`);
 
+// current_schema() reports NULL until the schema exists, so a brand-new test
+// namespace could never pass the verification below. Creating the (validated,
+// non-public) schema is idempotent and touches nothing else.
+const bootstrap = new PrismaClient({ datasources: { db: { url } } });
+try {
+  await bootstrap.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+} finally {
+  await bootstrap.$disconnect();
+}
+
 // Independent verification of the target: the URL is not evidence by itself.
 // Connect with it and require the server to report exactly that namespace.
 const probe = new PrismaClient({ datasources: { db: { url } } });

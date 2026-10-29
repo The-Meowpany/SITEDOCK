@@ -55,7 +55,7 @@ describe("Dashboard Deployment Status and Rollback", () => {
 
   it("handles errors gracefully", async () => {
     const { api } = await import("@/lib/api-client");
-    (api.getWebsite as any).mockRejectedValueOnce(new Error("Failed to load"));
+    vi.mocked(api.getWebsite).mockRejectedValueOnce(new Error("Failed to load"));
     render(<WebsiteDetailPage />);
     await waitFor(() => {
       expect(screen.getByText(/Failed to load|error/i)).toBeInTheDocument();

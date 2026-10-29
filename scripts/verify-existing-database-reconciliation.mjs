@@ -75,6 +75,11 @@ const LEGACY_EXECUTED = [
 ];
 const LEGACY_RESOLVED = "0012_add_environment_and_roles";
 const REPAIR_MIGRATIONS = ["0006_organization_domain_repair", "0014_reconcile_model_drift"];
+// The installations were observed — and the repair migrations authored —
+// against the model as of 0014. Later migrations (0015+) change that model for
+// real (e.g. 0017 relaxes websites.organization_id), so the fixture must be
+// shaped to the 0014 model, not to today's schema.prisma.
+const OBSERVED_MODEL_MIGRATIONS = [...LEGACY_EXECUTED, LEGACY_RESOLVED, ...REPAIR_MIGRATIONS].sort();
 
 const args = process.argv.slice(2);
 const keep = args.includes("--keep");
@@ -95,48 +100,73 @@ function copyMigration(name, targetMigrationsDir) {
   fs.cpSync(source, path.join(targetMigrationsDir, name), { recursive: true });
 }
 
-/** Recreates the observed existing-installation state (schema + history). */
-async function buildLegacyFixture(namespace) {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "sitedock-legacy-fixture-"));
-  const fixtureSchema = path.join(workspace, "schema.prisma");
-  const fixtureMigrations = path.join(workspace, "migrations");
-  fs.mkdirSync(fixtureMigrations);
-  fs.copyFileSync(schemaPath, fixtureSchema);
-  for (const name of LEGACY_EXECUTED) copyMigration(name, fixtureMigrations);
+/** A throwaway Prisma project: the schema file plus the given migrations. */
+function migrationWorkspace(prefix, names) {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const schemaFile = path.join(workspace, "schema.prisma");
+  fs.mkdirSync(path.join(workspace, "migrations"));
+  fs.copyFileSync(schemaPath, schemaFile);
+  const lock = path.join(migrationsDir, "migration_lock.toml");
+  if (fs.existsSync(lock)) fs.copyFileSync(lock, path.join(workspace, "migrations", "migration_lock.toml"));
+  for (const name of names) copyMigration(name, path.join(workspace, "migrations"));
+  return { workspace, schemaFile };
+}
 
-  // 1. Execute the migrations the observed installations executed.
-  const deployLegacy = prisma(["migrate", "deploy", "--schema", fixtureSchema], namespace.url);
-  if (deployLegacy.status !== 0) {
-    throw new Error(`could not build the legacy fixture:\n${(deployLegacy.stdout + deployLegacy.stderr).trim()}`);
-  }
+/**
+ * Recreates the observed existing-installation state (schema + history).
+ * `observed` is an empty sibling namespace used to materialise the 0014 model
+ * that `prisma db push` produced on the real databases.
+ */
+async function buildLegacyFixture(namespace, observed) {
+  const legacy = migrationWorkspace("sitedock-legacy-fixture-", LEGACY_EXECUTED);
+  const model = migrationWorkspace("sitedock-observed-model-", OBSERVED_MODEL_MIGRATIONS);
+  try {
+    // 1. Execute the migrations the observed installations executed.
+    const deployLegacy = prisma(["migrate", "deploy", "--schema", legacy.schemaFile], namespace.url);
+    if (deployLegacy.status !== 0) {
+      throw new Error(`could not build the legacy fixture:\n${(deployLegacy.stdout + deployLegacy.stderr).trim()}`);
+    }
 
-  // 2. Shape the rest of the schema out of band, exactly as `prisma db push`
-  //    did on the real databases. Safe only because this namespace is
-  //    disposable and empty.
-  const push = prisma(
-    ["db", "push", "--schema", fixtureSchema, "--skip-generate", "--accept-data-loss"],
-    namespace.url
-  );
-  if (push.status !== 0) {
-    throw new Error(`could not apply the out-of-band schema push:\n${(push.stdout + push.stderr).trim()}`);
-  }
-
-  // 3. Record 0012 as applied without executing it (steps = 0), like the real
-  //    databases.
-  copyMigration(LEGACY_RESOLVED, fixtureMigrations);
-  const resolve = prisma(
-    ["migrate", "resolve", "--applied", LEGACY_RESOLVED, "--schema", fixtureSchema],
-    namespace.url
-  );
-  if (resolve.status !== 0) {
-    throw new Error(
-      `could not record the fixture's applied-but-not-executed migration:\n${(
-        resolve.stdout + resolve.stderr
-      ).trim()}`
+    // 2. Shape the rest of the schema out of band, exactly as `prisma db push`
+    //    did on the real databases, to the model those databases had (0014).
+    //    Safe only because both namespaces are disposable and were created by
+    //    this run.
+    const deployModel = prisma(["migrate", "deploy", "--schema", model.schemaFile], observed.url);
+    if (deployModel.status !== 0) {
+      throw new Error(`could not materialise the observed model:\n${(deployModel.stdout + deployModel.stderr).trim()}`);
+    }
+    const shape = prisma(
+      ["migrate", "diff", "--from-url", namespace.url, "--to-url", observed.url, "--script"],
+      namespace.url
     );
-  }
+    if (shape.status !== 0) {
+      throw new Error(`could not compute the out-of-band shape:\n${(shape.stdout + shape.stderr).trim()}`);
+    }
+    const shapeFile = path.join(legacy.workspace, "out-of-band.sql");
+    fs.writeFileSync(shapeFile, shape.stdout);
+    const push = prisma(["db", "execute", "--file", shapeFile, "--url", namespace.url], namespace.url);
+    if (push.status !== 0) {
+      throw new Error(`could not apply the out-of-band schema shape:\n${(push.stdout + push.stderr).trim()}`);
+    }
 
-  fs.rmSync(workspace, { recursive: true, force: true });
+    // 3. Record 0012 as applied without executing it (steps = 0), like the real
+    //    databases.
+    copyMigration(LEGACY_RESOLVED, path.join(legacy.workspace, "migrations"));
+    const resolve = prisma(
+      ["migrate", "resolve", "--applied", LEGACY_RESOLVED, "--schema", legacy.schemaFile],
+      namespace.url
+    );
+    if (resolve.status !== 0) {
+      throw new Error(
+        `could not record the fixture's applied-but-not-executed migration:\n${(
+          resolve.stdout + resolve.stderr
+        ).trim()}`
+      );
+    }
+  } finally {
+    fs.rmSync(legacy.workspace, { recursive: true, force: true });
+    fs.rmSync(model.workspace, { recursive: true, force: true });
+  }
   return { migrations: [...LEGACY_EXECUTED, LEGACY_RESOLVED].sort() };
 }
 
@@ -295,15 +325,18 @@ async function main() {
   const kind = canCreateDatabase[0]?.allowed ? "database" : "schema";
   const namespace = await createNamespace(adminUrl, adminTarget, kind);
   const expectedSchema = kind === "database" ? "public" : namespace.name;
+  const observed = await createNamespace(adminUrl, adminTarget, kind);
+  const observedSchema = kind === "database" ? "public" : observed.name;
   const failures = [];
 
-  log(`created ${namespace.kind} "${namespace.name}"`);
+  log(`created ${namespace.kind} "${namespace.name}" (fixture) and "${observed.name}" (observed model)`);
 
   try {
     assertMigrationTarget(namespace, parseTarget(namespace.url, "fixture target"));
+    assertMigrationTarget(observed, parseTarget(observed.url, "observed model target"));
 
     log("building the observed existing-installation state (0001–0013, 0012 recorded with 0 steps)…");
-    await buildLegacyFixture(namespace);
+    await buildLegacyFixture(namespace, observed);
 
     const historyBefore = await readHistory(namespace.url, expectedSchema);
     if (historyBefore.length !== 12) {
@@ -331,32 +364,42 @@ async function main() {
     log(`fixture seeded: ${Object.values(rowsBefore).reduce((total, entry) => total + entry.rows, 0)} rows in ${populatedTables} tables`);
 
     // The premise of the test: this fixture is an installation whose schema
-    // already matches the model, exactly like `public` and `sitedock_test`.
-    const preDiff = prisma(
-      ["migrate", "diff", "--from-url", namespace.url, "--to-schema-datamodel", schemaPath, "--exit-code"],
-      namespace.url
-    );
-    if (preDiff.status !== 0) {
-      failures.push(
-        `the fixture does not match schema.prisma before reconciliation:\n${(preDiff.stdout + preDiff.stderr).trim()}`
-      );
+    // already matches the model it was shaped from, exactly like `public` and
+    // `sitedock_test` were.
+    const observedModel = await readSchema(observed.url, observedSchema);
+    if (fingerprint(schemaBefore) !== fingerprint(observedModel)) {
+      failures.push("the fixture does not match the observed (0014) model before reconciliation");
     }
 
-    log("running the tracked migrations against the fixture…");
+    // Phase 1: the repair migrations alone must be pure no-ops on it.
+    log("running the repair migrations (through 0014) against the fixture…");
+    const repair = migrationWorkspace("sitedock-repair-", OBSERVED_MODEL_MIGRATIONS);
+    let repairDeploy;
+    try {
+      repairDeploy = prisma(["migrate", "deploy", "--schema", repair.schemaFile], namespace.url);
+    } finally {
+      fs.rmSync(repair.workspace, { recursive: true, force: true });
+    }
+    log(`prisma migrate deploy (through 0014) exited ${repairDeploy.status}`);
+    if (repairDeploy.status !== 0) {
+      failures.push(`repair migrate deploy failed:\n${(repairDeploy.stdout + repairDeploy.stderr).trim()}`);
+    }
+    for (const name of REPAIR_MIGRATIONS) {
+      if (!(repairDeploy.stdout + repairDeploy.stderr).includes(name)) {
+        failures.push(`migrate deploy did not apply "${name}" to the existing installation`);
+      }
+    }
+    const schemaAfterRepair = await readSchema(namespace.url, expectedSchema);
+    if (fingerprint(schemaBefore) !== fingerprint(schemaAfterRepair)) {
+      failures.push("the repair migrations changed the schema of an installation that already matched the model");
+    }
+
+    // Phase 2: the rest of the tracked chain upgrades it to today's model.
+    log("running the remaining tracked migrations against the fixture…");
     const deploy = prisma(["migrate", "deploy", "--schema", schemaPath], namespace.url);
     log(`prisma migrate deploy exited ${deploy.status}`);
     if (deploy.status !== 0) {
       failures.push(`migrate deploy failed:\n${(deploy.stdout + deploy.stderr).trim()}`);
-    }
-    for (const name of REPAIR_MIGRATIONS) {
-      if (!(deploy.stdout + deploy.stderr).includes(name)) {
-        failures.push(`migrate deploy did not apply "${name}" to the existing installation`);
-      }
-    }
-
-    const schemaAfter = await readSchema(namespace.url, expectedSchema);
-    if (fingerprint(schemaBefore) !== fingerprint(schemaAfter)) {
-      failures.push("the schema changed while reconciling an installation that already matched the model");
     }
 
     const rowsAfter = await contentHashes(namespace.url, expectedSchema);
@@ -424,10 +467,11 @@ async function main() {
     }
   } finally {
     if (keep) {
-      log(`kept ${namespace.kind} "${namespace.name}" (--keep)`);
+      log(`kept ${namespace.kind}s "${namespace.name}" and "${observed.name}" (--keep)`);
     } else {
       await dropNamespace(adminUrl, adminTarget, namespace);
-      log(`dropped ${namespace.kind} "${namespace.name}"`);
+      await dropNamespace(adminUrl, adminTarget, observed);
+      log(`dropped ${namespace.kind}s "${namespace.name}" and "${observed.name}"`);
     }
   }
 
@@ -436,7 +480,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  log("PASS existing installation reconciled with no schema change and no data change");
+  log("PASS existing installation reconciled: repair migrations were no-ops, the chain upgraded it to schema.prisma, no data changed");
 }
 
 main().catch((error) => {

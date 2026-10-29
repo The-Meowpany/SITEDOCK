@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { assertDedicatedTestDatabase } from "../test-database";
 
 const require = createRequire(import.meta.url);
 const prismaCli = require.resolve("prisma/build/index.js");
