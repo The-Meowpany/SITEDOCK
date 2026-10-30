@@ -33,9 +33,18 @@ export class CreateServiceUseCase {
     const name = input.name?.trim();
     if (!name) throw new ApplicationError("Service name is required", "MISSING_SERVICE_NAME");
 
-    const hostname =
-      input.hostname?.trim() ||
-      `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "service"}-${randomUUID().slice(0, 8)}`;
+    // Slugify without `replace(/^-+|-+$/g, "")`: trimming dashes with an
+    // unanchored `-+$` is quadratic on a dash-heavy name (CWE-1333). Splitting
+    // on the separator we just inserted is linear and equivalent.
+    const slug =
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .split("-")
+        .filter(Boolean)
+        .join("-")
+        .slice(0, 40) || "service";
+    const hostname = input.hostname?.trim() || `${slug}-${randomUUID().slice(0, 8)}`;
 
     // A service created with an inline Dockerfile/build context is not a git
     // source. Defaulting it to "github" made every deploy try to clone a

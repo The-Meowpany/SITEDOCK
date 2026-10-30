@@ -43,7 +43,26 @@ export function MaintenancePanel({
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [coverage, setCoverage] = useState<TierCoverage | null>(null);
+
+  async function handleAction(action: "approve" | "changes", requestId: string) {
+    setBusyId(requestId);
+    setActionError(null);
+    try {
+      if (action === "approve") {
+        await api.approveMaintenanceRequest(workspaceId, websiteId, requestId);
+      } else {
+        await api.requestMaintenanceChanges(workspaceId, websiteId, requestId);
+      }
+      setRequests(await api.listMaintenanceRequests(workspaceId, websiteId));
+    } catch {
+      setActionError("No pudimos actualizar la solicitud. Probá de nuevo.");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,10 +103,31 @@ export function MaintenancePanel({
                   {r.currency} {(r.priceCents / 100).toFixed(2)}
                 </p>
               )}
+              {r.status === "COMPLETED" && (
+                <div className={styles.actions}>
+                  <button
+                    className={`${styles.action} ${styles.actionPrimary}`}
+                    type="button"
+                    disabled={busyId === r.id}
+                    onClick={() => handleAction("approve", r.id)}
+                  >
+                    Aprobar trabajo
+                  </button>
+                  <button
+                    className={styles.action}
+                    type="button"
+                    disabled={busyId === r.id}
+                    onClick={() => handleAction("changes", r.id)}
+                  >
+                    Pedir cambios
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
       )}
+      {actionError && <p className={styles.error} role="alert">{actionError}</p>}
 
       <form className={styles.form} onSubmit={handleSubmit}>
         <p className={styles.formLabel}>Pedir un cambio</p>

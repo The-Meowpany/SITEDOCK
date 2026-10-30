@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync, existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { InfrastructureError } from "@sitedock/shared";
 import { StorageProvider } from "../domain/ports";
 
@@ -24,11 +24,24 @@ export class DiskStorageProvider implements StorageProvider {
   }
 
   private fullPath(key: string): string {
-    // Sanitize the key to prevent path traversal
-    if (!key || key.startsWith("/") || key.includes("//") || key.split("/").includes("..")) {
+    // Prove the resolved path cannot escape `root`. A regex check on `..` is not
+    // enough: `join`/`resolve` treat `..` segments after a drive letter or a
+    // backslash differently on Windows (CWE-22). Resolve the candidate absolute
+    // path first, then require it to still live under the root.
+    if (
+      !key ||
+      key.includes("\0") ||
+      key.includes("\\") ||
+      key.startsWith("/") ||
+      key.includes("//")
+    ) {
       throw new InfrastructureError(`Unsafe storage key: "${key}"`, "UNSAFE_STORAGE_KEY");
     }
-    return join(this.root, key);
+    const full = resolve(this.root, key);
+    if (full !== this.root && !full.startsWith(this.root + sep)) {
+      throw new InfrastructureError(`Unsafe storage key: "${key}"`, "UNSAFE_STORAGE_KEY");
+    }
+    return full;
   }
 
   async put(key: string, content: Buffer): Promise<void> {

@@ -272,11 +272,10 @@ export function verifyWebhookSignature(
 }
 
 function base64Url(input: Buffer | string): string {
-  return Buffer.from(input)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  // `base64url` produces the exact alphabet the replace chain below built
+  // ("+"→"-", "/"→"_", padding stripped) without running three regexes over
+  // every encoded byte (CWE-1333).
+  return Buffer.from(input).toString("base64url");
 }
 
 /**

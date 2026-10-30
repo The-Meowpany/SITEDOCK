@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import styles from "./page.module.css";
 import { api } from "@/lib/api-client";
@@ -51,6 +52,11 @@ function LoginForm() {
       <button className={styles.submit} type="submit" disabled={submitting}>
         {submitting ? "Ingresando…" : "Ingresar"}
       </button>
+      <p className={styles.helper}>
+        <Link className={styles.link} href="/forgot-password">
+          ¿Olvidaste tu contraseña?
+        </Link>
+      </p>
     </form>
   );
 }

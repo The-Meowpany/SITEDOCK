@@ -13,6 +13,17 @@ describe("renderEmail", () => {
     expect(email.body).toContain("Jane");
   });
 
+  it("renders a password_reset email with the reset link", () => {
+    const email = renderEmail({
+      type: "password_reset",
+      recipientEmail: "dev@example.com",
+      resetUrl: "https://app.sitedock.test/reset-password/token-123",
+    });
+    expect(email.subject).toMatch(/Reset/);
+    expect(email.body).toContain("https://app.sitedock.test/reset-password/token-123");
+    expect(email.body).toContain("30 minutes");
+  });
+
   it("renders a checkout_created email with price and link", () => {
     const email = renderEmail({
       type: "checkout_created",
@@ -35,6 +46,7 @@ describe("renderEmail", () => {
   it("renders every event type without throwing", () => {
     const events: Parameters<typeof renderEmail>[0][] = [
       { type: "welcome", recipientEmail: "a@b.com", fullName: "A" },
+      { type: "password_reset", recipientEmail: "a@b.com", resetUrl: "https://x" },
       { type: "client_invited", recipientEmail: "a@b.com", clientName: "A", workspaceName: "W", inviteUrl: "https://x" },
       { type: "checkout_created", recipientEmail: "a@b.com", websiteName: "W", checkoutUrl: "https://x", priceDecimal: "1.00", currency: "USD" },
       { type: "payment_succeeded", recipientEmail: "a@b.com", websiteName: "W", amountDecimal: "1.00", currency: "USD" },
@@ -119,6 +131,24 @@ describe("NotificationService", () => {
     expect(log.records).toHaveLength(1);
     expect(log.records[0]).toMatchObject({ recipient: "dev@example.com", type: "welcome" });
     expect(log.records[0]!.sentAt).not.toBeNull();
+  });
+
+  it("redacts password reset links from the persisted notification payload", async () => {
+    const provider = new MockEmailProvider();
+    const log = new InMemoryNotificationLog();
+    const service = new NotificationService(provider, log);
+
+    await service.notify({
+      type: "password_reset",
+      recipientEmail: "dev@example.com",
+      resetUrl: "https://app.sitedock.test/reset-password/secret-token",
+    });
+
+    expect(provider.sentEmails[0]!.body).toContain("secret-token");
+    expect(log.records[0]!.payload).toEqual({
+      type: "password_reset",
+      recipientEmail: "dev@example.com",
+    });
   });
 
   it("logs a failed send with sentAt: null and surfaces an InfrastructureError, without throwing raw provider errors", async () => {

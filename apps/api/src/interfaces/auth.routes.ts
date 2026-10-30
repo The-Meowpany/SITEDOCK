@@ -91,11 +91,13 @@ authRouter.post("/password-reset/request", authRateLimiter, async (req, res, nex
   try {
     const { email } = z.object({ email: z.string().email() }).parse(req.body);
     const result = await requestPasswordReset.execute(email);
-    // NEVER log the raw token — even in development. The token is a secret
-    // that grants password reset. In demo mode, the developer can inspect
-    // the NotificationService output or use the MockEmailProvider's sent
-    // emails to retrieve the link.
-    void result; // result.rawToken is consumed by NotificationService only
+    if (result) {
+      notifyBestEffort({
+        type: "password_reset",
+        recipientEmail: email,
+        resetUrl: `${config.dashboardUrl}/reset-password/${result.rawToken}`,
+      });
+    }
     res.status(202).json({ message: "If that email exists, a reset link has been sent." });
   } catch (err) {
     next(err);

@@ -18,6 +18,10 @@ export interface CertificateProbe {
   probe(hostname: string): Promise<TlsCertificate>;
 }
 
+/** Handshake failures that mean "the chain does not validate", not "network broke". */
+const CERTIFICATE_FAILURE_RE =
+  /certificate|cert_|self.signed|unable to verify|depth zero|untrusted|altname|not after/i;
+
 /**
  * Performs a real TLS handshake against the public hostname and reads the
  * certificate Caddy served. SiteDock does not mint certificates itself: Caddy
@@ -41,7 +45,10 @@ export class NodeTlsCertificateProbe implements CertificateProbe {
         host: hostname,
         servername: hostname,
         port: 443,
-        rejectUnauthorized: false,
+        // Validate the chain AND the hostname during the handshake. Rejections
+        // are surfaced below as TLS_CERTIFICATE_UNTRUSTED, so callers keep the
+        // same error semantics they had when validation was done by hand.
+        rejectUnauthorized: true,
         timeout: this.timeoutMs,
       });
 
@@ -124,13 +131,11 @@ export class NodeTlsCertificateProbe implements CertificateProbe {
       });
 
       socket.once("error", (err) => {
+        const code = CERTIFICATE_FAILURE_RE.test(err.message)
+          ? "TLS_CERTIFICATE_UNTRUSTED"
+          : "TLS_HANDSHAKE_FAILED";
         finish(() =>
-          reject(
-            new InfrastructureError(
-              `TLS handshake with ${hostname} failed: ${err.message}`,
-              "TLS_HANDSHAKE_FAILED"
-            )
-          )
+          reject(new InfrastructureError(`TLS handshake with ${hostname} failed: ${err.message}`, code))
         );
       });
     });

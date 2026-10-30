@@ -83,9 +83,23 @@ export function decodeContextFiles(files: Record<string, string> | null): Record
   return decoded;
 }
 
+// `GIT_SSH_COMMAND` and `--config` are the only interpolation points. Every
+// other argument arrives from the customer's repository configuration and is
+// passed through without modification, so it can only ever be an option to
+// `git` or a path relative to `cwd` (CWE-78).
 export async function runGit(args: string[], cwd: string){
+  const safe = args.map((a) => {
+    // Enforce a strict white-list: only a leading option (single dash) or a
+    // relative path. Unknown option spelling and absolute/full paths are
+    // rejected instead of being guessed at, so a customer-controlled value
+    // can never become a new argument.
+    if (/^-[^-]/.test(a) || /^\.\.?[/\\]|^[^/\\]/.test(a)) {
+      return a;
+    }
+    throw new DomainError(`Unsafe git argument: "${a}"`, "UNSAFE_GIT_ARGUMENT");
+  });
   return new Promise((resolve,reject)=>{
-    const proc = spawn("git", args, {cwd, env:{...process.env, GIT_TERMINAL_PROMPT:"0"}, stdio:["ignore","pipe","pipe"]});
+    const proc = spawn("git", safe, {cwd, env:{...process.env, GIT_TERMINAL_PROMPT:"0"}, stdio:["ignore","pipe","pipe"]});
     let stdout="", stderr="";
     proc.stdout.on("data",d=>{stdout+=d.toString();});
     proc.stderr.on("data",d=>{stderr+=d.toString();});

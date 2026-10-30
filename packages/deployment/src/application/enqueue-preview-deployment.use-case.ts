@@ -4,11 +4,15 @@ import { PreviewRepository } from "../domain/ports";
 
 /** Preview hostnames are DNS labels: lowercase, alnum/dash, max 63 chars. */
 export function previewHostnameFor(websiteId: string, branch: string, suffix?: string): string {
+  // No `replace(/^-+|-+$/g, "")`: trimming dashes with an unanchored `-+$` is
+  // quadratic on a dash-heavy branch name (CWE-1333). Split/join is linear.
   const branchSlug =
     branch
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
+      .split("-")
+      .filter(Boolean)
+      .join("-")
       .slice(0, 28) || "branch";
   const hash = createHash("sha256")
     .update(`${websiteId}:${branch}`)

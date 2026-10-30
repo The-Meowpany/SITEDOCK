@@ -143,6 +143,18 @@ export const api = {
       body: JSON.stringify({ title, description }),
     }),
 
+  approveMaintenanceRequest: (workspaceId: string, websiteId: string, requestId: string) =>
+    request<void>(
+      `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/maintenance-requests/${requestId}/approve`,
+      { method: "POST" }
+    ),
+
+  requestMaintenanceChanges: (workspaceId: string, websiteId: string, requestId: string) =>
+    request<void>(
+      `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/maintenance-requests/${requestId}/request-changes`,
+      { method: "POST" }
+    ),
+
   acceptInvitation: (token: string) =>
     request<{ workspaceId: string }>(`/api/v1/invitations/${token}/accept`, { method: "POST" }),
 };

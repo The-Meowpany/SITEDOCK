@@ -30,17 +30,35 @@ export const ServicePlanId = (v: string): ServicePlanId => brandUuid(v, "Service
 
 /** EmailAddress value object — validated once at the boundary, safe everywhere after. */
 export class EmailAddress {
-  private static readonly EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   readonly value: string;
 
-  private constructor(value: string) {
+  // Validation is linear: split the address at every `@` and scan the local
+  // and domain parts for whitespace. The old regex re-split the whole string
+  // at every `@`, which is quadratic on an @-heavy input (CWE-1333).
+  private static isValid(value: string): boolean {
+    const at = value.indexOf('@');
+    if (at <= 0 || at !== value.lastIndexOf('@')) return false;
+    const local = value.slice(0, at);
+    const domain = value.slice(at + 1);
+    if (local.length === 0 || domain.length === 0) return false;
+    for (let i = 0; i < local.length; i++) {
+      if (local.charCodeAt(i) <= 32) return false;
+    }
+    for (let i = 0; i < domain.length; i++) {
+      if (domain.charCodeAt(i) <= 32) return false;
+    }
+    const dot = domain.lastIndexOf('.');
+    return dot > 0 && dot < domain.length - 1;
+  }
+
+  constructor(value: string) {
     this.value = value;
   }
 
   static create(raw: string): EmailAddress {
     const normalized = raw.trim().toLowerCase();
-    if (!EmailAddress.EMAIL_RE.test(normalized)) {
-      throw new DomainError(`Invalid email address: "${raw}"`, "INVALID_EMAIL");
+    if (!EmailAddress.isValid(normalized)) {
+      throw new DomainError('Invalid email address: ' + raw, 'INVALID_EMAIL');
     }
     return new EmailAddress(normalized);
   }
@@ -53,11 +71,6 @@ export class EmailAddress {
     return this.value;
   }
 }
-
-/**
- * DomainName value object — validates hostnames used for custom domains and
- * generated subdomains (docs/ARCHITECTURE.md "Value Objects" list).
- */
 export class DomainName {
   private static readonly HOSTNAME_RE =
     /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/;

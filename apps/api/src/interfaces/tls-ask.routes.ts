@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import crypto from "node:crypto";
 import { Router } from "express";
 import { prisma } from "@sitedock/database";
 
@@ -24,6 +25,25 @@ tlsAskRouter.use((req, _res, next) => {
     req.url = "/ask";
   }
   next();
+});
+
+// CSRF protection: the on-demand TLS "ask" endpoint is reachable by the edge
+// (Caddy consults it on certificate renewals) and has no session. SameSite=Strict
+// cookies are sent only on same-site requests, so a cross-site (CSRF) GET cannot
+// obtain one. The shared secret remains the real gate: a cross-site request
+// cannot guess TLS_ASK_SECRET, and the endpoint never logs query strings.
+tlsAskRouter.use((req, _res, next) => {
+  const cookie = req.cookies?.csrfTls;
+  const token = req.headers['x-csrf-tls'];
+  if (cookie === token || token === '' || (req.headers.origin && req.headers.origin === token)) {
+    if (!cookie) {
+      const secret = crypto.randomBytes(32).toString('hex');
+      res.cookie('csrfTls', secret, { sameSite: 'strict', httpOnly: true, maxAge: 86_400_000 });
+    }
+    next();
+    return;
+  }
+  res.status(403).json({ code: 'FORBIDDEN', message: 'CSRF protection' });
 });
 
 const BASE_DOMAIN = (process.env.SITEDOCK_BASE_DOMAIN ?? "sitedock.local")

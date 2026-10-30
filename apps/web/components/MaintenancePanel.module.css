@@ -46,6 +46,40 @@
   color: var(--stamp-warn);
 }
 
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.action {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.actionPrimary {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.action:hover:not(:disabled) {
+  filter: brightness(0.94);
+}
+
+.action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .badge {
   flex-shrink: 0;
   font-size: 11px;

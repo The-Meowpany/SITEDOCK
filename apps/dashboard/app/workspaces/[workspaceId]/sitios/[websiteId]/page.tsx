@@ -947,12 +947,15 @@ export default function SiteConsolePage() {
                         <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("start", r.id)}>Iniciar</button>
                       </>
                     )}
-                    {(r.status === "PAID" || r.status === "IN_PROGRESS") && (
-                      <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("complete", r.id)}>Completar</button>
-                    )}
-                    {r.status === "PENDING_PAYMENT" && (
-                      <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("mark-paid", r.id)}>Marcar pagada</button>
-                    )}
+        {r.status === "PAID" && (
+          <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("start", r.id)}>Iniciar</button>
+        )}
+        {r.status === "IN_PROGRESS" && (
+          <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("complete", r.id)}>Completar</button>
+        )}
+        {r.status === "PENDING_PAYMENT" && (
+          <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("mark-paid", r.id)}>Marcar pagada</button>
+        )}
                     {r.status === "COMPLETED" && (
                       <button className={btnGhost} disabled={busy === `req-${r.id}`} onClick={() => requestAction("approve", r.id)}>Aprobar por el cliente</button>
                     )}

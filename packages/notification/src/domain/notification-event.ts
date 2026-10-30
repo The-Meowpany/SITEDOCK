@@ -5,6 +5,7 @@
  */
 export type NotificationEvent =
   | { type: "welcome"; recipientEmail: string; fullName: string }
+  | { type: "password_reset"; recipientEmail: string; resetUrl: string }
   | { type: "client_invited"; recipientEmail: string; clientName: string; workspaceName: string; inviteUrl: string }
   | { type: "checkout_created"; recipientEmail: string; websiteName: string; checkoutUrl: string; priceDecimal: string; currency: string }
   | { type: "payment_succeeded"; recipientEmail: string; websiteName: string; amountDecimal: string; currency: string }

@@ -21,6 +21,13 @@ export function renderEmail(event: NotificationEvent): RenderedEmail {
         body: `Hi ${event.fullName}, your SiteDock account is ready. Let's turn your next website into recurring revenue.`,
       };
 
+    case "password_reset":
+      return {
+        to: event.recipientEmail,
+        subject: "Reset your SiteDock password",
+        body: `We received a request to reset your SiteDock password. Use this link within 30 minutes: ${event.resetUrl}. If you did not request this, ignore this email.`,
+      };
+
     case "client_invited":
       return {
         to: event.recipientEmail,

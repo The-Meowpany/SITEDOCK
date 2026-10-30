@@ -24,7 +24,9 @@ export async function authenticateApiToken(req: Request, _res: Response, next: N
     return;
   }
 
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  // `[ \t]+` and `\S+` are disjoint, so the match is linear in the header
+  // length — `\s+(.+ )` lets the two parts re-split the same spaces (CWE-1333).
+  const match = /^Bearer[ \t]+(\S+)$/i.exec(header.trim());
   if (!match) {
     next();
     return;

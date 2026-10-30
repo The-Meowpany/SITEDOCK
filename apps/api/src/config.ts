@@ -58,6 +58,7 @@ export const config = {
   env: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT ?? 4000),
   cookieDomain: process.env.COOKIE_DOMAIN,
+  dashboardUrl: process.env.DASHBOARD_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
   isProduction: process.env.NODE_ENV === "production",
   corsOrigin: parseCorsOrigins(process.env.CORS_ORIGIN),
   /**

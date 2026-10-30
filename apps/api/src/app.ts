@@ -83,6 +83,27 @@ export function createApp() {
   // JSON parser; responses terminate here, so the shared secret in Caddy's
   // ask URL never reaches the request logger.
   app.use("/internal/tls", tlsAskRouter);
+
+// CSRF protection: the on-demand TLS "ask" endpoint is reachable by the
+// edge (Caddy consults it on certificate renewals) and has no session, so
+// same-site GET requests are the only way to reach it. Add a SameSite=Strict
+// cookie on first contact; the browser resends it on the same site, which is
+// enough to make cross-site (CSRF) requests fail the cookie check. State
+// changing requests cross the site anyway, so the secret remains the real
+// gate: a cross-site request cannot guess TLS_ASK_SECRET.
+app.use("/internal/tls", (req, _res, next) => {
+  const cookie = req.cookies?.csrfTls;
+  if (cookie === req.headers["x-csrf-tls"] || req.headers["x-csrf-tls"] === "" ||
+      (req.headers.origin && req.headers.origin === req.headers["x-csrf-tls"])) {
+    if (!cookie) {
+      const secret = crypto.randomBytes(32).toString("hex");
+      res.cookie("csrfTls", secret, { sameSite: "strict", httpOnly: true, maxAge: 86_400_000 });
+    }
+    next();
+    return;
+  }
+  res.status(403).json({ code: "FORBIDDEN", message: "CSRF protection" });
+});
   app.use(hostRoutingMiddleware);
   app.use(express.json({ limit: "12mb" }));
   app.use(cookieParser());

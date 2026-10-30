@@ -18,13 +18,17 @@ export class NotificationService {
 
   async notify(event: NotificationEvent): Promise<{ sent: boolean }> {
     const email = renderEmail(event);
+    const payload =
+      event.type === "password_reset"
+        ? { type: event.type, recipientEmail: event.recipientEmail }
+        : event;
 
     try {
       await this.emailProvider.send(email);
-      await this.log.record({ recipient: email.to, type: event.type, payload: event, sentAt: new Date() });
+      await this.log.record({ recipient: email.to, type: event.type, payload, sentAt: new Date() });
       return { sent: true };
     } catch (err) {
-      await this.log.record({ recipient: email.to, type: event.type, payload: event, sentAt: null });
+      await this.log.record({ recipient: email.to, type: event.type, payload, sentAt: null });
       if (err instanceof InfrastructureError) throw err;
       throw new InfrastructureError(
         `Failed to send "${event.type}" notification to ${email.to}`,

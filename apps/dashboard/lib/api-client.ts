@@ -253,6 +253,18 @@ export const api = {
 
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
 
+  requestPasswordReset: (email: string) =>
+    request<{ message: string }>("/api/v1/auth/password-reset/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  confirmPasswordReset: (token: string, newPassword: string) =>
+    request<void>("/api/v1/auth/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({ token, newPassword }),
+    }),
+
   // ── Workspaces / métricas ────────────────────────────────
   listWorkspaces: () => request<WorkspaceSummary[]>("/api/v1/workspaces"),
 
