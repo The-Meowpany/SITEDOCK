@@ -20,6 +20,7 @@ import type {
 } from "@/lib/api-client";
 import { ApiError } from "@/lib/api-error";
 import { money, moneyFromDecimal } from "@/lib/format";
+import { siteHostname } from "@/lib/site-domain";
 import { StatusChip } from "@/components/StatusChip";
 import { Field, btnGhost, btnPrimary, formRow, inputClass, selectClass } from "@/components/ui";
 import styles from "./page.module.css";
@@ -473,7 +474,7 @@ export default function SiteConsolePage() {
           <h1 className={styles.title}>{site.name}</h1>
           <StatusChip status={site.status} />
         </div>
-        <span className={styles.monoDim}>{site.subdomain}.sitedock.app</span>
+        <span className={styles.monoDim}>{siteHostname(site.subdomain)}</span>
       </header>
 
       {error && <p className={styles.error}>{error}</p>}

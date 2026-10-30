@@ -8,6 +8,7 @@ import { StatusStamp } from "@/components/StatusStamp";
 import { SubscriptionReceipt } from "@/components/SubscriptionReceipt";
 import { MaintenancePanel } from "@/components/MaintenancePanel";
 import { api, ApiError, type MaintenanceRequestSummary, type SubscriptionDetail, type WebsiteDetail } from "@/lib/api-client";
+import { siteHostname } from "@/lib/site-domain";
 
 interface PortalData {
   website: WebsiteDetail;
@@ -97,7 +98,7 @@ export default function PortalPage() {
         <LedgerCard>
           <LedgerSection eyebrow="SiteDock · Ficha de servicio">
             <h1 className={styles.siteName}>{website.name}</h1>
-            <p className={styles.subdomain}>{website.subdomain}.sitedock.app</p>
+            <p className={styles.subdomain}>{siteHostname(website.subdomain)}</p>
             <div className={styles.stampSlot}>
               <StatusStamp status={website.status} />
             </div>

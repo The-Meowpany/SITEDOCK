@@ -8,6 +8,7 @@ import type { ProjectSummary, WebsiteSummary } from "@/lib/api-client";
 import { ApiError } from "@/lib/api-error";
 import { Field, btnGhost, btnPrimary, formRow, inputClass, selectClass } from "@/components/ui";
 import { OnboardingChecklist, StatusChip } from "@/components/StatusChip";
+import { siteHostname } from "@/lib/site-domain";
 import styles from "./page.module.css";
 
 type CreationMode = "existing-project" | "new-project";
@@ -168,7 +169,7 @@ export default function SitesPage() {
               <li key={site.id}>
                 <Link href={`/workspaces/${workspaceId}/sitios/${site.id}`} className={styles.siteCard}>
                   <span className={styles.siteName}>{site.name}</span>
-                  <span className={styles.siteSubdomain}>{site.subdomain}.sitedock.app</span>
+                  <span className={styles.siteSubdomain}>{siteHostname(site.subdomain)}</span>
                   <StatusChip status={site.status} />
                 </Link>
               </li>

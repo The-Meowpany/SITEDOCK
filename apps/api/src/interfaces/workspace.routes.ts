@@ -11,7 +11,8 @@ import {
   PrismaWorkspaceRepository,
   UpdateWorkspaceBrandingUseCase,
 } from "@sitedock/workspace";
-import { EmailAddress, ConflictError, UserId } from "@sitedock/shared";
+import { EmailAddress, ConflictError, UserId, WorkspaceId } from "@sitedock/shared";
+import { EnsureClientForUserUseCase, PrismaClientRepository } from "@sitedock/client";
 import { PrismaUserRepository } from "@sitedock/auth";
 import { requireSession } from "../middleware/require-session";
 import { config } from "../config";
@@ -20,6 +21,7 @@ import { notifyBestEffort } from "../notifications";
 
 const workspaces = new PrismaWorkspaceRepository();
 const invitations = new PrismaWorkspaceInvitationRepository();
+const clients = new PrismaClientRepository();
 const users = new PrismaUserRepository();
 const createWorkspace = new CreateWorkspaceUseCase(workspaces);
 const listMyWorkspaces = new ListMyWorkspacesUseCase(workspaces);
@@ -27,6 +29,7 @@ const assertWorkspaceAccess = new AssertWorkspaceAccessUseCase(workspaces);
 const addWorkspaceMember = new AddWorkspaceMemberUseCase(workspaces);
 const createWorkspaceInvitation = new CreateWorkspaceInvitationUseCase(invitations);
 const acceptWorkspaceInvitation = new AcceptWorkspaceInvitationUseCase(invitations, workspaces);
+const ensureClientForUser = new EnsureClientForUserUseCase(clients);
 
 const createWorkspaceSchema = z.object({ name: z.string().min(2) });
 const inviteSchema = z.object({
@@ -224,6 +227,25 @@ invitationRouter.post("/:token/accept", async (req, res, next) => {
       acceptingUserId: req.userId!,
       acceptingUserEmail: me.email.value,
     });
+
+    const workspace = await workspaces.findById(WorkspaceId(result.workspaceId));
+    if (workspace?.roleOf(UserId(req.userId!)) === "CLIENT") {
+      const { clientId, created } = await ensureClientForUser.execute({
+        workspaceId: result.workspaceId,
+        userId: req.userId!,
+        fullName: me.fullName,
+        email: me.email.value,
+      });
+
+      auditBestEffort({
+        workspaceId: result.workspaceId,
+        actorId: req.userId!,
+        action: created ? "CLIENT_CREATED" : "CLIENT_LINKED",
+        resourceType: "Client",
+        resourceId: clientId,
+        metadata: { source: "invitation", invitationToken: req.params.token.slice(0, 8) },
+      });
+    }
 
     auditBestEffort({
       workspaceId: result.workspaceId,
