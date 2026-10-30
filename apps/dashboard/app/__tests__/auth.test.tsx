@@ -38,7 +38,7 @@ describe("Dashboard Authentication", () => {
 
   it("shows error message on failed login", async () => {
     const { api } = await import("@/lib/api-client");
-    (api.login as any).mockRejectedValueOnce(new Error("Invalid"));
+    vi.mocked(api.login).mockRejectedValueOnce(new Error("Invalid"));
     render(<LoginPage />);
     await waitFor(() => {
       expect(screen.getByText("Consola del developer")).toBeInTheDocument();

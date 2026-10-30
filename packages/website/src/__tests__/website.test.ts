@@ -99,6 +99,19 @@ describe("Website — billing-driven suspension flow", () => {
     expect(site.status).toBe("LIVE");
   });
 
+  it("lets an operator suspend a LIVE or PAST_DUE website and reactivate it", () => {
+    const live = liveWebsite();
+    live.suspend();
+    expect(live.status).toBe("SUSPENDED");
+    live.reactivate();
+    expect(live.status).toBe("LIVE");
+
+    const overdue = liveWebsite();
+    overdue.markPastDue();
+    overdue.suspend();
+    expect(overdue.status).toBe("SUSPENDED");
+  });
+
   it("allows recovering directly from PAST_DUE without going through suspension", () => {
     const site = liveWebsite();
     site.markPastDue();

@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { Money, ServicePlanId, SubscriptionId, WebsiteId } from "@sitedock/shared";
+import { Money, ServicePlanId, SubscriptionId, WebsiteId, WorkspaceId } from "@sitedock/shared";
 import { Subscription } from "../domain/subscription.entity";
 import { InvoiceRepository, PaymentRepository, SubscriptionRepository, WebhookEventStore } from "../domain/ports";
 import { Invoice, NormalizedProviderEvent, Payment } from "../domain/payment";
@@ -7,6 +7,8 @@ import { FlatPercentageFeePolicy } from "../domain/revenue-share";
 import { MockPaymentProvider } from "../infrastructure/mock-payment.provider";
 import { CreateCheckoutSessionUseCase } from "../application/create-checkout-session.use-case";
 import { ProcessPaymentWebhookUseCase } from "../application/process-webhook.use-case";
+import { CreateSubscriptionUseCase } from "../application/create-subscription.use-case";
+import { ServicePlan } from "../domain/service-plan.entity";
 
 const WEBSITE = WebsiteId("11111111-1111-1111-1111-111111111111");
 const PLAN = ServicePlanId("22222222-2222-2222-2222-222222222222");
@@ -227,6 +229,53 @@ describe("Checkout + webhook flow (billing lifecycle end-to-end with fakes)", ()
     expect(payment.status).toBe("FAILED");
     expect(invoices.store.size).toBe(1);
     expect([...invoices.store.values()][0]!.status).toBe("FAILED");
+  });
+
+  it("cancels the subscription on subscription.canceled and reports its kind", async () => {
+    const subscription = newIncompleteSubscription();
+    subscription.activate();
+    subscription.attachExternalSubscription("demo_cs_cancel");
+    await subscriptions.save(subscription);
+
+    const { rawBody, signature } = provider.signPayload({
+      type: "subscription.canceled",
+      eventId: "evt_cancel_1",
+      externalSubscriptionId: "demo_cs_cancel",
+    });
+    const result = await processWebhook.execute("mock", provider.verifyAndParseWebhook(rawBody, signature), rawBody);
+
+    expect(result).toMatchObject({ duplicate: false, subscriptionStatus: "CANCELED", subscriptionKind: "HOSTING" });
+  });
+
+  it("resubscribing after cancellation starts a fresh subscription on the same (website, kind) row", async () => {
+    const workspaceId = WorkspaceId("44444444-4444-4444-4444-444444444444");
+    const plan = ServicePlan.create({
+      id: PLAN,
+      workspaceId,
+      name: "Hosting",
+      price: Money.fromCents(2900, "USD"),
+      billingInterval: "MONTHLY",
+    });
+    const plans = {
+      findByIdInWorkspace: async () => plan,
+      listByWorkspace: async () => [plan],
+      save: async () => {},
+    };
+    const canceled = newIncompleteSubscription();
+    canceled.activate();
+    canceled.cancel();
+    await subscriptions.save(canceled);
+
+    const result = await new CreateSubscriptionUseCase(subscriptions, plans).execute({
+      workspaceId,
+      websiteId: WEBSITE,
+      planId: PLAN,
+      paymentProvider: "mock",
+    });
+
+    expect(result.subscriptionId).toBe(canceled.id);
+    expect(subscriptions.store.size).toBe(1);
+    expect(subscriptions.store.get(canceled.id)!.status).toBe("INCOMPLETE");
   });
 
   it("releases the ledger claim when processing fails, so a retry is not swallowed", async () => {

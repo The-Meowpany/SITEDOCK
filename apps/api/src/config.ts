@@ -48,12 +48,18 @@ export function validateProductionConfig(
   return errors;
 }
 
+/** CORS_ORIGIN is a comma-separated list (see .env.example); cors() needs an array, not the raw string. */
+export function parseCorsOrigins(value: string | undefined): string[] {
+  const origins = (value ?? "http://localhost:3000").split(",").map((o) => o.trim()).filter(Boolean);
+  return origins.length ? origins : ["http://localhost:3000"];
+}
+
 export const config = {
   env: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT ?? 4000),
   cookieDomain: process.env.COOKIE_DOMAIN,
   isProduction: process.env.NODE_ENV === "production",
-  corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
+  corsOrigin: parseCorsOrigins(process.env.CORS_ORIGIN),
   /**
    * Demo-only mutation endpoints (/demo-payments/* simulate payment outcomes
    * and force suspensions). NEVER available in production — they exist so the

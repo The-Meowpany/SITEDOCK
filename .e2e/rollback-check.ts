@@ -10,7 +10,7 @@ async function main() {
     baseUrl: process.env.RUNTIME_AGENT_URL,
     token: process.env.RUNTIME_AGENT_TOKEN,
   });
-  const summary = (await agent.inspectContainer(containerId)) as Record<string, any>;
+  const summary = (await agent.inspectContainer(containerId)) as Record<string, unknown>;
   const runningImage = summary?.Image;
 
   const deployments = await prisma.serviceDeployment.findMany({

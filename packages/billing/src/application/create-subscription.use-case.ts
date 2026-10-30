@@ -42,8 +42,10 @@ export class CreateSubscriptionUseCase {
       );
     }
 
+    // The (websiteId, kind) row is unique, so resubscribing after CANCELED/EXPIRED
+    // starts a fresh INCOMPLETE subscription on that same row.
     const subscription = Subscription.create({
-      id: SubscriptionId(randomUUID()),
+      id: existing ? existing.id : SubscriptionId(randomUUID()),
       websiteId,
       kind: plan.kind,
       planId: plan.id,

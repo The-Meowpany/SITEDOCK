@@ -2,7 +2,7 @@
   "name": "sitedock",
   "private": true,
   "version": "0.1.0",
-  "description": "SiteDock — Recurring Website Infrastructure for Freelancers",
+  "description": "SiteDock \u2014 Recurring Website Infrastructure for Freelancers",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -16,7 +16,10 @@
     "lint": "eslint .",
     "e2e": "node scripts/e2e-demo.mjs",
     "db:generate": "npm run db:generate -w packages/database",
-    "db:migrate": "npm run db:migrate -w packages/database"
+    "db:migrate": "npm run db:migrate -w packages/database",
+    "db:test:setup": "node scripts/setup-test-database.mjs",
+    "db:migrate:verify": "node scripts/verify-migrations.mjs",
+    "db:migrate:verify:existing": "node scripts/verify-existing-database-reconciliation.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -26,4 +29,3 @@
     "typescript-eslint": "^8.67.0"
   }
 }
-

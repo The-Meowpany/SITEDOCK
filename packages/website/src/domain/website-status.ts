@@ -21,8 +21,8 @@ export const websiteStateMachine = new StateMachine<WebsiteStatus>("Website", {
   PREVIEW: ["PENDING_APPROVAL", "ARCHIVED"],
   PENDING_APPROVAL: ["APPROVED", "PREVIEW", "ARCHIVED"],
   APPROVED: ["LIVE", "ARCHIVED"],
-  LIVE: ["PAST_DUE", "ARCHIVED"],
-  PAST_DUE: ["GRACE_PERIOD", "LIVE"], // LIVE = payment recovered before grace period
+  LIVE: ["PAST_DUE", "SUSPENDED", "ARCHIVED"], // SUSPENDED = operator suspension (abuse, admin action)
+  PAST_DUE: ["GRACE_PERIOD", "LIVE", "SUSPENDED"], // LIVE = payment recovered before grace period
   GRACE_PERIOD: ["SUSPENDED", "LIVE"], // LIVE = payment recovered during grace period
   SUSPENDED: ["LIVE", "ARCHIVED"], // LIVE = payment recovered after suspension
   ARCHIVED: ["DELETED"],

@@ -26,6 +26,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
+import { buildPullArgsForVersion, isUnsupportedBuildNoNewPrivileges } from "./podman-compat.mjs";
 
 const HOST = process.env.RUNTIME_AGENT_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.RUNTIME_AGENT_PORT ?? 4010);
@@ -115,6 +116,20 @@ async function podman(args, options) {
   }
   return result;
 }
+
+// Podman 3.x (Ubuntu 22.04 / Debian 12) has no `build --pull=<policy>`.
+let buildPullArgsPromise;
+function buildPullArgs() {
+  buildPullArgsPromise ??= runPodman(["--version"], { timeoutMs: 5000 }).then(
+    (r) => buildPullArgsForVersion(r.code === 0 ? r.stdout : ""),
+    () => []
+  );
+  return buildPullArgsPromise;
+}
+
+// Buildah behind most Podman releases rejects `build --security-opt
+// no-new-privileges`; containers still always run with it (see createContainer).
+let buildNoNewPrivileges = true;
 
 async function inspectContainer(idOrName) {
   const result = await podman(["inspect", idOrName]);
@@ -379,14 +394,14 @@ async function buildImage(body) {
       await writeFile(target, content, { mode: 0o644 });
     }
 
-    const args = [
+    const pullArgs = await buildPullArgs();
+    const buildArgs = () => [
       "build",
-      "--pull=missing",
+      ...pullArgs,
       "--network=none",
       "--label",
       "sitedock.managed=true",
-      "--security-opt",
-      "no-new-privileges",
+      ...(buildNoNewPrivileges ? ["--security-opt", "no-new-privileges"] : []),
       "--memory",
       "512m",
       "-t",
@@ -395,7 +410,21 @@ async function buildImage(body) {
       join(buildDir, "Dockerfile"),
       buildDir,
     ];
-    const result = await podman(args, { timeoutMs: BUILD_TIMEOUT_MS, maxOutput: 512 * 1024 });
+    const buildOptions = { timeoutMs: BUILD_TIMEOUT_MS, maxOutput: 512 * 1024 };
+    let attempt = await runPodman(buildArgs(), buildOptions);
+    if (attempt.code !== 0 && buildNoNewPrivileges && isUnsupportedBuildNoNewPrivileges(attempt.stderr)) {
+      buildNoNewPrivileges = false;
+      log("build-no-new-privileges-unsupported", {});
+      attempt = null;
+    }
+    const result = attempt ?? (await podman(buildArgs(), buildOptions));
+    if (result.code !== 0) {
+      throw new AgentError(
+        500,
+        "RUNTIME_COMMAND_FAILED",
+        `podman build failed (${result.code}): ${(result.stderr || result.stdout).slice(-2000)}`
+      );
+    }
     const inspected = await podman(["image", "inspect", tag]);
     const parsed = JSON.parse(inspected.stdout)[0];
     const digest = parsed.Digest || (parsed.RepoDigests ?? [])[0]?.split("@")[1] || parsed.Id;

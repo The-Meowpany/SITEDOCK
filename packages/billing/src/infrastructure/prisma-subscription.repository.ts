@@ -97,7 +97,12 @@ export class PrismaSubscriptionRepository implements SubscriptionRepository {
         externalSubscriptionId: subscription.externalSubscriptionId,
       },
       update: {
+        planId: subscription.planId,
         status: subscription.status,
+        priceCents: subscription.price.amountCents,
+        currency: subscription.price.currency,
+        billingInterval: subscription.billingInterval,
+        paymentProvider: subscription.paymentProvider,
         startDate: subscription.startDate,
         nextBillingDate: subscription.nextBillingDate,
         gracePeriodEndsAt: subscription.gracePeriodEndsAt,

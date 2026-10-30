@@ -328,6 +328,111 @@ The following must be completed before production deployment can be justified:
 
 ---
 
+## 11. Real Workflow Verification (2026-10-29)
+
+Executed against a running local stack: PostgreSQL 16, API (`tsx apps/api/src/server.ts`), worker, rootless Podman 3.4.4 runtime agent, disk storage, Caddy 2.8.4, and production builds of dashboard/admin. Payment and domain providers are the **mock** providers; no live Stripe, DNSHE, S3, Resend, or GitHub call was made.
+
+### Commands and results
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `node scripts/verify-platform-journeys.mjs` | 0 | 37 passed, 0 failed (journeys A–G over real HTTP) |
+| `node scripts/verify-service-deployment.mjs` | 0 | API → DB queue → worker → runtime agent → `podman build`/`run` → health → activation → hostname routing; v2 update, rollback, failed deployment keeps v2 live |
+| `node scripts/e2e-demo.mjs` | 0 | 17 steps |
+| `SITEDOCK_MIGRATION_TEST_ADMIN_URL=… npm run db:migrate:verify` | 0 | greenfield chain reproducible from an empty namespace (40 tables, 27 enums, 124 indexes, 93 constraints) |
+| `SITEDOCK_MIGRATION_TEST_ADMIN_URL=… npm run db:migrate:verify:existing` | 0 | 0014-era database reconciled, row data unchanged |
+| `npm run lint` / `npm run typecheck` | 0 / 0 | |
+| `npm run test:unit` | 0 | all Vitest groups pass |
+| `node --test apps/runtime-agent/` | 0 | 4 passed |
+| `NODE_ENV=production next build` (dashboard, admin) | 0 / 0 | `next start` serves `/` and `/login` with HTTP 200 |
+
+### Journey checks (`verify-platform-journeys.mjs`)
+
+| Journey | Check | Result |
+|---------|-------|--------|
+| A | register + login issue a session | `PASS` |
+| A | session resolves the account | `PASS` |
+| A | workspace persisted and listed | `PASS` |
+| A | workspace settings (branding) update persists | `PASS` |
+| A | non-member cannot read or change another workspace | `PASS` |
+| A | anonymous request is rejected | `PASS` |
+| B | unpublished website is not served | `PASS` |
+| B | published v1 is served on its platform hostname | `PASS` |
+| B | unknown and malformed hostnames fail closed | `PASS` |
+| B | non-member cannot deploy to the website | `PASS` |
+| C | publishing v2 changes the served response | `PASS` |
+| C | a broken upload is rejected and v2 stays live | `PASS` |
+| C | rollback serves v1 again | `PASS` |
+| F | backup created and listed | `PASS` |
+| F | backup listing hides storage paths | `PASS` |
+| F | restore creates a new version without going live by itself | `PASS` |
+| F | published restore serves the backed-up content | `PASS` |
+| F | non-member cannot restore | `PASS` |
+| F | tampered backup is refused by the integrity check | `PASS` |
+| D | unverified custom domain is not routed | `PASS` |
+| D | verified custom domain routes to the website | `PASS` |
+| D | TLS ask allows only owned hosts with the shared secret | `PASS` |
+| D | non-member cannot attach a domain | `PASS` |
+| E | a second hosting subscription for the same site is refused | `PASS` |
+| E | checkout payment activates the hosting plan | `PASS` |
+| E | non-member cannot read the subscription | `PASS` |
+| E | a webhook with a forged signature changes nothing | `PASS` |
+| E | failed payment marks subscription and site PAST_DUE | `PASS` |
+| E | a successful retry restores ACTIVE + LIVE | `PASS` |
+| E | canceling the maintenance membership keeps the site live | `PASS` |
+| E | canceling the hosting plan takes the site offline | `PASS` |
+| E | a replayed webhook is acknowledged as a duplicate | `PASS` |
+| E | resubscribing restores service | `PASS` |
+| G | non-admin is refused platform administration | `PASS` |
+| G | admin can inspect platform resources | `PASS` |
+| G | admin suspension takes the site offline | `PASS` |
+| G | actions are recorded in the audit log | `PASS` |
+
+### Caddy / TLS (local internal CA)
+
+Caddy ran the production `on_demand_tls` + `ask` gate against the API, using `tls internal` on `:8443`:
+- a LIVE platform hostname got a certificate (SAN = hostname, issuer "Caddy Local Authority") and HTTP 200 with the site content;
+- an unknown hostname was refused at the TLS handshake (no certificate issued);
+- `:8080` answered `308` to `https://`.
+
+Public ACME issuance remains `BLOCKED` (no public domain or ingress).
+
+### Defects found by executing the journeys, fixed with regression tests
+
+| Defect | Observable symptom | Fix |
+|--------|--------------------|-----|
+| Runtime agent passed `--pull=missing` to Podman 3.x | every service build failed | version-aware pull args; build-only `no-new-privileges` fallback (runtime containers keep it) |
+| Workspace branding route mounted as `/branding` | `PATCH /workspaces/:id/branding` → 404 | route `/:workspaceId/branding`; GET returns `branding` |
+| Website lifecycle forbade `LIVE → SUSPENDED` | admin suspend → 409, site kept serving | operator suspension allowed from LIVE and PAST_DUE |
+| Canceled HOSTING subscription left site LIVE | site served after cancellation | webhook result carries `subscriptionKind`; canceled HOSTING suspends the site, MAINTENANCE does not |
+| Resubscribe after cancel created a new row | 500, unique `(website_id, kind)` violation | reuse terminal row; upsert updates plan/price/provider |
+| Forged webhook signature | 500 `INTERNAL_ERROR` | 400 `INVALID_WEBHOOK_SIGNATURE` |
+| Mock payment webhooks (public fixed secret) accepted whenever mock was the active provider | forgeable billing events if production fell back to mock | refused unless demo endpoints are enabled (never in production) |
+| `CORS_ORIGIN` list (as in `.env.example`/compose) sent verbatim | `Access-Control-Allow-Origin: a,b,c`, browsers reject every dashboard/admin call | parsed into an origin list |
+| CI referenced missing `db:*` npm scripts; lint had 7 errors | CI could not pass | scripts added, lint fixed |
+
+### Observations not changed (policy decisions)
+
+- A failed payment moves the site to `PAST_DUE`, and PAST_DUE sites are not served (HTTP 404) — before the grace period/suspension job runs.
+- A VERIFIED custom domain of a SUSPENDED site still passes the TLS `ask` gate (certificate issued) while HTTP returns 404.
+- `next build` fails if `NODE_ENV=development` is exported in the shell; builds must use `NODE_ENV=production`.
+
+### Status
+
+| Area | Status |
+|------|--------|
+| Journeys A, B, C, D (local routing + local TLS), E (mock provider), F, G (API) | `PASS` |
+| Greenfield migrations and existing-installation reconciliation | `PASS` (supersedes the `BLOCKED` entries in sections 3, 9 and 10) |
+| Runtime pipeline (worker + runtime agent + Podman + HTTP traffic) | `PASS` (supersedes reason 4 in section 10) |
+| Dashboard/admin production build and startup | `PASS` |
+| Browser-level UI flows | `NOT TESTED` |
+| Live Stripe, DNSHE, S3, Resend, GitHub | `BLOCKED` (no test credentials) |
+| Public DNS, public HTTPS/ACME | `BLOCKED` |
+
+Final verdict unchanged: `NOT READY for production deployment` until the `BLOCKED` items above are verified.
+
+---
+
 ## Changed Files Summary
 
 Files modified during this engineering fix session:

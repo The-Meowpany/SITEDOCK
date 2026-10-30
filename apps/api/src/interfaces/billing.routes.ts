@@ -34,6 +34,7 @@ import {
 import { logger } from "../logger";
 import { notifyBestEffort } from "../notifications";
 import { auditBestEffort } from "../audit";
+import { config } from "../config";
 
 const connectedAccountsRepo = new PrismaConnectedAccountRepository();
 
@@ -233,7 +234,12 @@ subscriptionRouter.post<WebsiteScopedParams & { subscriptionId: string }>("/:sub
  * bypassing the membership check itself is correct — but the tenant-scoped
  * use cases still need a real workspaceId).
  */
-async function applySubscriptionOutcomeToWebsite(websiteId: string, subscriptionStatus?: string) {
+/** A canceled HOSTING subscription ends the entitlement to serve the site; a canceled MAINTENANCE membership does not. */
+export function hostingEntitlementEnded(subscriptionStatus?: string, subscriptionKind?: string): boolean {
+  return subscriptionStatus === "CANCELED" && subscriptionKind === "HOSTING";
+}
+
+async function applySubscriptionOutcomeToWebsite(websiteId: string, subscriptionStatus?: string, subscriptionKind?: string) {
   const website = await websites.findById(WebsiteId(websiteId));
   if (!website) return;
 
@@ -246,6 +252,9 @@ async function applySubscriptionOutcomeToWebsite(websiteId: string, subscription
       wasReactivated = beforeStatus === "SUSPENDED" || beforeStatus === "GRACE_PERIOD" || beforeStatus === "PAST_DUE";
     } else if (subscriptionStatus === "PAST_DUE") {
       await markPastDue.execute(websiteId, website.workspaceId);
+    } else if (hostingEntitlementEnded(subscriptionStatus, subscriptionKind)) {
+      await suspendWebsite.execute(websiteId, website.workspaceId);
+      auditBestEffort({ workspaceId: website.workspaceId, actorId: null, action: "WEBSITE_SUSPENDED", resourceType: "Website", resourceId: websiteId, metadata: { reason: "HOSTING_SUBSCRIPTION_CANCELED" } });
     }
   } catch (lifecycleErr) {
     // Website may already be in the target status (e.g. first-ever publish
@@ -290,12 +299,21 @@ async function applySubscriptionOutcomeToWebsite(websiteId: string, subscription
  * (provider, eventId) inside ProcessPaymentWebhookUseCase before it can
  * mutate any subscription.
  */
+/**
+ * The mock provider signs with a public, fixed secret, so its webhooks are only
+ * trusted where demo endpoints are allowed (never in production).
+ */
+export function acceptsPaymentWebhook(provider: string, activeProvider: string, allowDemoEndpoints: boolean): boolean {
+  if (provider !== activeProvider) return false;
+  return provider !== "mock" || allowDemoEndpoints;
+}
+
 export const paymentWebhookRouter = Router();
 
 paymentWebhookRouter.post("/:provider", async (req, res, next) => {
   try {
     const provider = req.params.provider;
-    if (provider !== paymentProvider.name) {
+    if (!acceptsPaymentWebhook(provider, paymentProvider.name, config.allowDemoEndpoints)) {
       throw new ApplicationError(`Unknown payment provider: ${provider}`, "UNKNOWN_PAYMENT_PROVIDER");
     }
 
@@ -329,11 +347,16 @@ paymentWebhookRouter.post("/:provider", async (req, res, next) => {
       }
     }
 
-    const event = paymentProvider.verifyAndParseWebhook(rawBody, signature);
+    let event: ReturnType<typeof paymentProvider.verifyAndParseWebhook>;
+    try {
+      event = paymentProvider.verifyAndParseWebhook(rawBody, signature);
+    } catch {
+      throw new ApplicationError("Invalid webhook signature or payload", "INVALID_WEBHOOK_SIGNATURE");
+    }
     const result = await processWebhook.execute(provider, event, rawBody);
 
     if (!result.duplicate && result.websiteId) {
-      await applySubscriptionOutcomeToWebsite(result.websiteId, result.subscriptionStatus);
+      await applySubscriptionOutcomeToWebsite(result.websiteId, result.subscriptionStatus, result.subscriptionKind);
     }
 
     res.status(200).json({ received: true, duplicate: result.duplicate });
@@ -361,7 +384,7 @@ demoPaymentRouter.post<WorkspaceParams>("/simulate-payment-succeeded", async (re
     const event = paymentProvider.verifyAndParseWebhook(rawBody, signature);
     const result = await processWebhook.execute(paymentProvider.name, event, rawBody);
     if (!result.duplicate && result.websiteId) {
-      await applySubscriptionOutcomeToWebsite(result.websiteId, result.subscriptionStatus);
+      await applySubscriptionOutcomeToWebsite(result.websiteId, result.subscriptionStatus, result.subscriptionKind);
     }
     res.json(result);
   } catch (err) {
@@ -397,7 +420,7 @@ demoPaymentRouter.post<WorkspaceParams>("/simulate-payment-failed", async (req, 
     const event = paymentProvider.verifyAndParseWebhook(rawBody, signature);
     const result = await processWebhook.execute(paymentProvider.name, event, rawBody);
     if (!result.duplicate && result.websiteId) {
-      await applySubscriptionOutcomeToWebsite(result.websiteId, result.subscriptionStatus);
+      await applySubscriptionOutcomeToWebsite(result.websiteId, result.subscriptionStatus, result.subscriptionKind);
     }
     res.json(result);
   } catch (err) {
