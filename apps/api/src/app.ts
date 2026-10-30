@@ -4,6 +4,7 @@ import cors from "cors";
 import type { Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
+import crypto from "node:crypto";
 import { randomUUID } from "node:crypto";
 import { config } from "./config";
 import { logger } from "./logger";
@@ -97,12 +98,12 @@ app.use("/internal/tls", (req, _res, next) => {
       (req.headers.origin && req.headers.origin === req.headers["x-csrf-tls"])) {
     if (!cookie) {
       const secret = crypto.randomBytes(32).toString("hex");
-      res.cookie("csrfTls", secret, { sameSite: "strict", httpOnly: true, maxAge: 86_400_000 });
+      _res.cookie("csrfTls", secret, { sameSite: "strict", httpOnly: true, maxAge: 86_400_000 });
     }
     next();
     return;
   }
-  res.status(403).json({ code: "FORBIDDEN", message: "CSRF protection" });
+  _res.status(403).json({ code: "FORBIDDEN", message: "CSRF protection" });
 });
   app.use(hostRoutingMiddleware);
   app.use(express.json({ limit: "12mb" }));

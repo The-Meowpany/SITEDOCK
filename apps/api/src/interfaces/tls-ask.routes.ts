@@ -38,12 +38,12 @@ tlsAskRouter.use((req, _res, next) => {
   if (cookie === token || token === '' || (req.headers.origin && req.headers.origin === token)) {
     if (!cookie) {
       const secret = crypto.randomBytes(32).toString('hex');
-      res.cookie('csrfTls', secret, { sameSite: 'strict', httpOnly: true, maxAge: 86_400_000 });
+      _res.cookie('csrfTls', secret, { sameSite: 'strict', httpOnly: true, maxAge: 86_400_000 });
     }
     next();
     return;
   }
-  res.status(403).json({ code: 'FORBIDDEN', message: 'CSRF protection' });
+  _res.status(403).json({ code: 'FORBIDDEN', message: 'CSRF protection' });
 });
 
 const BASE_DOMAIN = (process.env.SITEDOCK_BASE_DOMAIN ?? "sitedock.local")
