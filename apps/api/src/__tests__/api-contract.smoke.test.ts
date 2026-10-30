@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { validateProductionConfig } from "../config";
+import { parseCorsOrigins, validateProductionConfig } from "../config";
 import { createApp } from "../app";
 import { workspaceRouter } from "../interfaces/workspace.routes";
 import { acceptsPaymentWebhook, hostingEntitlementEnded } from "../interfaces/billing.routes";
@@ -51,6 +51,11 @@ describe("HTTP contract smoke (sin BD)", () => {
     });
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe("INVALID_WEBHOOK_SIGNATURE");
+  });
+
+  it("CORS_ORIGIN lists are split into individual allowed origins", () => {
+    expect(parseCorsOrigins("http://localhost:3000, http://localhost:3001,")).toEqual(["http://localhost:3000", "http://localhost:3001"]);
+    expect(parseCorsOrigins(undefined)).toEqual(["http://localhost:3000"]);
   });
 
   it("mock payment webhooks (public demo secret) are refused outside demo mode", () => {
