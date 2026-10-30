@@ -1,5 +1,7 @@
 ﻿# SiteDock
 
+[![CI](https://github.com/The-Meowpany/SITEDOCK/actions/workflows/ci.yml/badge.svg)](https://github.com/The-Meowpany/SITEDOCK/actions/workflows/ci.yml)
+
 **Recurring Website Infrastructure for Freelancers.**
 
 SiteDock convierte un proyecto web de pago único en un servicio mensual: el
