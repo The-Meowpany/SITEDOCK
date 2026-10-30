@@ -77,9 +77,9 @@ tlsAskRouter.get("/ask", async (req, res, next) => {
     }
 
     const provided =
-      (typeof req.headers["x-tls-ask-secret"] === "string"
+      typeof req.headers["x-tls-ask-secret"] === "string"
         ? req.headers["x-tls-ask-secret"]
-        : undefined) ?? (typeof req.query.secret === "string" ? req.query.secret : undefined);
+        : undefined;
 
     if (!secretMatches(provided, expectedSecret)) {
       res.status(403).json({ code: "FORBIDDEN", message: "Invalid TLS ask secret" });
