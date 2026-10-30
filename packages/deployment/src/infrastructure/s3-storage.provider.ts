@@ -33,7 +33,7 @@ function hmac(key: Buffer | string, data: string): Buffer {
  *   documentado (los listados de S3 son planos y acotados).
  */
 export class S3StorageProvider implements StorageProvider {
-  private readonly endpointFor: (key: string) => string;
+  private readonly baseUrl: URL;
 
   constructor(private readonly config: S3StorageProviderConfig) {
     if (!config.bucket || !config.region || !config.accessKeyId || !config.secretAccessKey) {
@@ -42,9 +42,16 @@ export class S3StorageProvider implements StorageProvider {
         "S3_CONFIG_MISSING"
       );
     }
-    this.endpointFor = config.endpoint
-      ? (key) => `${config.endpoint!.replace(/\/$/, "")}/${key}`
-      : (key) => `https://${config.bucket}.s3.${config.region}.amazonaws.com/${key}`;
+
+    const base = config.endpoint
+      ? new URL(config.endpoint)
+      : new URL(`https://${config.bucket}.s3.${config.region}.amazonaws.com/`);
+
+    if (base.protocol !== "https:" && base.protocol !== "http:") {
+      throw new InfrastructureError("S3 endpoint inválido: protocolo no permitido", "S3_CONFIG_INVALID_ENDPOINT");
+    }
+
+    this.baseUrl = base;
   }
 
   // ── Firma SigV4 ─────────────────────────────────────────
@@ -55,17 +62,50 @@ export class S3StorageProvider implements StorageProvider {
    * traversal y el escape de prefijo quedan bloqueados.
    */
   private sanitizeKey(key: string): string {
-    if (!key || key.startsWith("/") || key.includes("//") || key.split("/").includes("..")) {
+    if (
+      !key ||
+      key.startsWith("/") ||
+      key.includes("\\") ||
+      key.includes("//") ||
+      key.includes("?") ||
+      key.includes("#") ||
+      key.includes("%") ||
+      /[\u0000-\u001F\u007F]/.test(key)
+    ) {
       throw new InfrastructureError(
         `Unsafe storage key: "${key}"`,
         "UNSAFE_STORAGE_KEY"
       );
     }
+
+    const segments = key.split("/");
+    if (segments.some((s) => s.length === 0 || s === "." || s === "..")) {
+      throw new InfrastructureError(
+        `Unsafe storage key: "${key}"`,
+        "UNSAFE_STORAGE_KEY"
+      );
+    }
+
     return key;
   }
 
+  private buildObjectUrl(key: string): URL {
+    const sanitizedKey = this.sanitizeKey(key);
+    const encodedKey = sanitizedKey
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+
+    const url = new URL(this.baseUrl.toString());
+    const basePath = url.pathname.replace(/\/+$/, "");
+    url.pathname = `${basePath}/${encodedKey}`;
+    url.search = "";
+    url.hash = "";
+    return url;
+  }
+
   private signRequest(method: "GET" | "PUT" | "DELETE", key: string, body?: Buffer): HeadersInit & Record<string, string> {
-    const url = new URL(this.endpointFor(key));
+    const url = this.buildObjectUrl(key);
     const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
     const dateStamp = amzDate.slice(0, 8);
     const payloadHash = body ? sha256Hex(body) : EMPTY_SHA256;
@@ -112,9 +152,10 @@ export class S3StorageProvider implements StorageProvider {
 
   private async do(method: "GET" | "PUT" | "DELETE", key: string, body?: Buffer): Promise<Response> {
     const headers = this.signRequest(method, key, body);
+    const url = this.buildObjectUrl(key);
     try {
       return await withProviderMetrics({ provider: "s3", operation: method }, async () => {
-        return await (this.config.fetchImpl ?? fetch)(this.endpointFor(key), {
+        return await (this.config.fetchImpl ?? fetch)(url.toString(), {
           method,
           headers,
           body: body ? new Uint8Array(body) : undefined,
