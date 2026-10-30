@@ -64,7 +64,7 @@ const createPlanSchema = z.object({
   currency: z.string().length(3).default("USD"),
   billingInterval: z.enum(["MONTHLY", "YEARLY"]),
   includedRequestQuota: z.number().int().min(0).nullable().optional(),
-  features: z.record(z.any()).optional(),
+  features: z.record(z.string(), z.any()).optional(),
 });
 
 const updatePlanSchema = z.object({
@@ -73,7 +73,7 @@ const updatePlanSchema = z.object({
   currency: z.string().length(3).optional(),
   billingInterval: z.enum(["MONTHLY", "YEARLY"]).optional(),
   includedRequestQuota: z.number().int().min(0).nullable().optional(),
-  features: z.record(z.any()).optional(),
+  features: z.record(z.string(), z.any()).optional(),
   active: z.boolean().optional(),
 });
 
