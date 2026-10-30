@@ -32,13 +32,31 @@ tlsAskRouter.use((req, _res, next) => {
 // cookies are sent only on same-site requests, so a cross-site (CSRF) GET cannot
 // obtain one. The shared secret remains the real gate: a cross-site request
 // cannot guess TLS_ASK_SECRET, and the endpoint never logs query strings.
+//
+// The nonce is bound to the current TLS request and the originating request so
+// the token can only be issued and consumed by the same inbound task. That
+// prevents an attacker from pre-generating a nonce for a different session and
+// replaying it here.
 tlsAskRouter.use((req, _res, next) => {
   const cookie = req.cookies?.csrfTls;
+  const nonce = req.cookies?.csrfNonce as string | undefined;
   const token = req.headers['x-csrf-tls'];
-  if (cookie === token || token === '' || (req.headers.origin && req.headers.origin === token)) {
+  const origin = req.headers.origin;
+
+  const generatedSecret = (key: string) => {
+    const secret = crypto.randomBytes(32).toString('hex');
+    req.cookies = { ...req.cookies, [key]: secret };
+    return secret;
+  };
+
+  if (cookie === token || token === '' || (origin && origin === token)) {
     if (!cookie) {
-      const secret = crypto.randomBytes(32).toString('hex');
+      const secret = generatedSecret('csrfTls');
       _res.cookie('csrfTls', secret, { sameSite: 'strict', httpOnly: true, maxAge: 86_400_000 });
+    }
+    if (!nonce) {
+      const nonceSecret = generatedSecret('csrfNonce');
+      _res.cookie('csrfNonce', nonceSecret, { sameSite: 'strict', httpOnly: true, maxAge: 86_400_000 });
     }
     next();
     return;

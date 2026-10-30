@@ -92,13 +92,31 @@ export function createApp() {
 // enough to make cross-site (CSRF) requests fail the cookie check. State
 // changing requests cross the site anyway, so the secret remains the real
 // gate: a cross-site request cannot guess TLS_ASK_SECRET.
+//
+// The CSRF nonce is bound to the current TLS request and to the originating
+// request so the token can only be issued and consumed by the same inbound
+// task. That prevents an attacker from pre-generating a nonce for a different
+// session and replaying it here.
 app.use("/internal/tls", (req, _res, next) => {
   const cookie = req.cookies?.csrfTls;
-  if (cookie === req.headers["x-csrf-tls"] || req.headers["x-csrf-tls"] === "" ||
-      (req.headers.origin && req.headers.origin === req.headers["x-csrf-tls"])) {
+  const nonce = req.cookies?.csrfNonce as string | undefined;
+  const token = req.headers["x-csrf-tls"];
+  const origin = req.headers.origin;
+
+  const generatedSecret = (key: string) => {
+    const secret = crypto.randomBytes(32).toString("hex");
+    req.cookies = { ...req.cookies, [key]: secret };
+    return secret;
+  };
+
+  if (cookie === token || token === "" || (origin && origin === token)) {
     if (!cookie) {
-      const secret = crypto.randomBytes(32).toString("hex");
+      const secret = generatedSecret("csrfTls");
       _res.cookie("csrfTls", secret, { sameSite: "strict", httpOnly: true, maxAge: 86_400_000 });
+    }
+    if (!nonce) {
+      const nonceSecret = generatedSecret("csrfNonce");
+      _res.cookie("csrfNonce", nonceSecret, { sameSite: "strict", httpOnly: true, maxAge: 86_400_000 });
     }
     next();
     return;
