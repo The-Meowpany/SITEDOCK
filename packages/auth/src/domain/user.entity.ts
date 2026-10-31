@@ -64,6 +64,11 @@ export class User {
     this.props.updatedAt = new Date();
   }
 
+  markEmailVerified(at: Date = new Date()): void {
+    this.props.emailVerifiedAt = at;
+    this.props.updatedAt = new Date();
+  }
+
   /** A new address is unverified until the owner proves control of it. */
   changeEmail(email: EmailAddress): void {
     this.props.email = email;

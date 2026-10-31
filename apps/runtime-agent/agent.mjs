@@ -538,12 +538,21 @@ async function readCapped(res, maxBytes) {
   return Buffer.concat(chunks).subarray(0, maxBytes).toString("utf8");
 }
 
+const HEALTH_TIMEOUT_DEFAULT_MS = 1500;
+const HEALTH_TIMEOUT_MIN_MS = 100;
+const HEALTH_TIMEOUT_MAX_MS = 10_000;
+
 async function containerHealth(nameOrId, searchParams) {
   const path = searchParams.get("path") ?? "/health";
   if (!path.startsWith("/") || path.length > 512 || /[\r\n]/.test(path)) {
     throw new AgentError(400, "INVALID_HEALTH_PATH", "Health path must start with / and be a single line");
   }
-  const timeoutMs = Math.min(Math.max(Number(searchParams.get("timeoutMs") ?? 1500), 100), 10_000);
+  // Caller-supplied duration: validate it and bound it explicitly so a request can never
+  // keep a timer (and the connection it guards) alive for longer than HEALTH_TIMEOUT_MAX_MS.
+  let timeoutMs = Number.parseInt(searchParams.get("timeoutMs") ?? "", 10);
+  if (!Number.isFinite(timeoutMs)) timeoutMs = HEALTH_TIMEOUT_DEFAULT_MS;
+  if (timeoutMs > HEALTH_TIMEOUT_MAX_MS) timeoutMs = HEALTH_TIMEOUT_MAX_MS;
+  if (timeoutMs < HEALTH_TIMEOUT_MIN_MS) timeoutMs = HEALTH_TIMEOUT_MIN_MS;
   const summary = await cachedContainerSummary(nameOrId);
   if (!summary.running || !summary.hostPort) {
     return { healthy: false, reason: "runtime-not-running", container: summary };

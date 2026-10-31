@@ -464,7 +464,7 @@ npx vitest run --workspaces --if-present 2>&1 | grep -E "(Test Files|Tests)"
 
 ## Current Execution Evidence (Updated)
 
-**Migration count (filesystem):** 19 migrations in `packages/database/prisma/migrations/` (verified by enumeration)
+**Migration count (filesystem):** 20 migrations in `packages/database/prisma/migrations/` (verified by enumeration)
 
 **Test runner:** Root `npm test` uses `scripts/test-wrapper.mjs` requiring `SITEDOCK_TEST_DATABASE_URL` (exits 64 if missing). Added `npm run test:unit` for unit tests without PostgreSQL.
 
@@ -545,3 +545,41 @@ SITEDOCK_E2E_INFRASTRUCTURE=true npm test --workspace=@sitedock/deployment
 **Publicly Production-Ready:** NO (requires external DNS, TLS certificates, live payment provider, production infrastructure)
 
 All existing tests pass. The platform architecture is complete and coherent.
+
+---
+
+## Addendum — account/workspace management, i18n, English codebase (2026-10-31)
+
+Scope of this addendum: only what was executed in a sandbox **without PostgreSQL, Prisma engines,
+Podman, Stripe, DNS or TLS**. Nothing below counts as end-to-end acceptance.
+
+### Executed and passing (sandbox, no database)
+
+| Command (run in the package/app directory) | Result |
+| --- | --- |
+| `npx vitest run` in `packages/auth` | 35 passed |
+| `npx vitest run` in `packages/workspace` | 61 passed |
+| `npx vitest run` in `packages/billing`, `shared`, `domains`, `notification`, `audit` | 71 / 34 / 29 / 15 / 5 passed |
+| `npx vitest run` in `apps/dashboard` | 6 files, 28 tests passed |
+| `npx vitest run src/__tests__/trusted-origin.test.ts` in `apps/api` | 4 passed |
+| `npx tsc --noEmit -p .` in `apps/dashboard`, `apps/admin`, `apps/web` | 0 errors |
+| `npx eslint .` at the repository root | exit 0 |
+| `node --check` on `scripts/*.mjs` and `apps/runtime-agent/agent.mjs`; `bash -n` on `scripts/*.sh` | no syntax errors |
+
+### Implemented but NOT executed against real infrastructure
+
+- Prisma-backed repositories added in this change (`PrismaSessionAdminRepository`,
+  `PrismaAccountDeletionRepository`, `PrismaEmailVerificationRepository`,
+  workspace `removeMember` / `deleteIfEmpty`, `FOR UPDATE` membership locking).
+- Migration `0020_email_verification` (additive: one new table). Not applied anywhere yet.
+  Run `scripts/test-migration-upgrade-full.mjs` against an isolated database before deploying.
+- `apps/api` full typecheck and the database-backed suites (needs `prisma generate` + PostgreSQL).
+  The 5 `worker-concurrency` tests fixed by `fileParallelism: false` are confirmed only by the next CI run.
+
+### Known gaps (unchanged)
+
+- Real Podman deploy / rollback over HTTP, Stripe test-mode flows, custom-domain DNS, public TLS,
+  GitHub App flows, restored-backup verification, hosting plan limits (needs a product decision
+  on the limits themselves), `scripts/verify-infrastructure.mjs` TODO stubs.
+- CodeQL `js/missing-token-validation` on `cookieParser()`: the API relies on an `Origin` allow-list
+  (`middleware/trusted-origin.ts`) plus `SameSite=Lax`; CodeQL does not model that as CSRF protection.

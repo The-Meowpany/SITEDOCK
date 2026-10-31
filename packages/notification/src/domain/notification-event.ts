@@ -5,6 +5,7 @@
  */
 export type NotificationEvent =
   | { type: "security_notice"; recipientEmail: string; change: "password_changed" | "email_changed" | "account_deleted" | "sessions_revoked" }
+  | { type: "email_verification"; recipientEmail: string; verifyUrl: string }
   | { type: "welcome"; recipientEmail: string; fullName: string }
   | { type: "password_reset"; recipientEmail: string; resetUrl: string }
   | { type: "client_invited"; recipientEmail: string; clientName: string; workspaceName: string; inviteUrl: string }

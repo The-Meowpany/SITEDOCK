@@ -1,13 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
+import type { NextFunction, Request, Response } from "express";
 import { requireTrustedOrigin } from "../middleware/trusted-origin";
 
 function run(method: string, origin?: string) {
-  const mw = requireTrustedOrigin(["https://app.example.com/"]);
-  const req: any = { method, headers: origin === undefined ? {} : { origin } };
-  const res: any = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+  const middleware = requireTrustedOrigin(["https://app.example.com/"]);
+  const req = { method, headers: origin === undefined ? {} : { origin } } as unknown as Request;
+  const status = vi.fn().mockReturnThis();
+  const json = vi.fn();
+  const res = { status, json } as unknown as Response;
   const next = vi.fn();
-  mw(req, res, next);
-  return { res, next };
+  middleware(req, res, next as unknown as NextFunction);
+  return { status, json, next };
 }
 
 describe("requireTrustedOrigin (CSRF)", () => {
@@ -21,8 +24,8 @@ describe("requireTrustedOrigin (CSRF)", () => {
     expect(run("POST", "https://APP.example.com").next).toHaveBeenCalled();
   });
   it("rejects mutating requests from an untrusted origin", () => {
-    const { res, next } = run("DELETE", "https://evil.test");
+    const { status, next } = run("DELETE", "https://evil.test");
     expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(403);
+    expect(status).toHaveBeenCalledWith(403);
   });
 });

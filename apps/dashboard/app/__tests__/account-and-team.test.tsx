@@ -27,6 +27,7 @@ vi.mock("@/lib/api-client", () => ({
   api: {
     me: vi.fn(),
     listSessions: vi.fn(),
+    requestEmailVerification: vi.fn(),
     changePassword: vi.fn(),
     revokeSession: vi.fn(),
     deleteAccount: vi.fn(),
@@ -149,5 +150,24 @@ describe("TeamPage", () => {
     render(<TeamPage />);
     await screen.findByText(/cannot view the team roster/);
     expect(mocked.listMembers).not.toHaveBeenCalled();
+  });
+});
+
+describe("email verification banner", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocked.listSessions.mockResolvedValue([]);
+  });
+
+  it("shows a resend action only when the API reports the email as unverified", async () => {
+    mocked.me.mockResolvedValue({ id: "u1", email: "ana@example.com", fullName: "Ana", emailVerified: false });
+    const { unmount } = render(<AccountPage />);
+    expect(await screen.findByText(/not verified yet/)).toBeInTheDocument();
+    unmount();
+
+    mocked.me.mockResolvedValue({ id: "u1", email: "ana@example.com", fullName: "Ana", emailVerified: true });
+    render(<AccountPage />);
+    await screen.findByRole("region", { name: "Profile" });
+    expect(screen.queryByText(/not verified yet/)).toBeNull();
   });
 });

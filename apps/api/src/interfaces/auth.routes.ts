@@ -5,17 +5,20 @@ import {
   Argon2PasswordHasher,
   ChangeEmailUseCase,
   ChangePasswordUseCase,
+  ConfirmEmailVerificationUseCase,
   ConfirmPasswordResetUseCase,
   DeleteAccountUseCase,
   LoginUserUseCase,
   LogoutUserUseCase,
   ManageSessionsUseCase,
   PrismaAccountDeletionRepository,
+  PrismaEmailVerificationRepository,
   PrismaPasswordResetRepository,
   PrismaSessionAdminRepository,
   PrismaSessionRepository,
   PrismaUserRepository,
   RegisterUserUseCase,
+  RequestEmailVerificationUseCase,
   RequestPasswordResetUseCase,
   UpdateProfileUseCase,
   hashToken,
@@ -35,6 +38,9 @@ const registerUser = new RegisterUserUseCase(users, hasher);
 const loginUser = new LoginUserUseCase(users, hasher, sessions);
 const logoutUser = new LogoutUserUseCase(sessions);
 const requestPasswordReset = new RequestPasswordResetUseCase(users, resets);
+const emailVerifications = new PrismaEmailVerificationRepository();
+const requestEmailVerification = new RequestEmailVerificationUseCase(users, emailVerifications);
+const confirmEmailVerification = new ConfirmEmailVerificationUseCase(users, emailVerifications);
 const sessionAdmin = new PrismaSessionAdminRepository();
 const confirmPasswordReset = new ConfirmPasswordResetUseCase(users, resets, hasher, sessionAdmin);
 const changePassword = new ChangePasswordUseCase(users, hasher, sessionAdmin);
@@ -80,6 +86,7 @@ authRouter.post("/register", authRateLimiter, async (req, res, next) => {
     const body = registerSchema.parse(req.body);
     const result = await registerUser.execute(body);
     notifyBestEffort({ type: "welcome", recipientEmail: result.email, fullName: result.fullName });
+    await sendVerificationEmail(result.userId);
     res.status(201).json(result);
   } catch (err) {
     next(err);
@@ -146,7 +153,13 @@ authRouter.get("/me", requireSession, async (req, res, next) => {
   try {
     const user = await users.findById(UserId(req.userId!));
     if (!user) return res.status(404).json({ code: "NOT_FOUND", message: "User not found" });
-    res.json({ id: user.id, email: user.email.value, fullName: user.fullName, platformRole: user.platformRole });
+    res.json({
+      id: user.id,
+      email: user.email.value,
+      fullName: user.fullName,
+      platformRole: user.platformRole,
+      emailVerified: user.emailVerifiedAt !== null,
+    });
   } catch (err) {
     next(err);
   }
@@ -156,6 +169,22 @@ const updateProfileSchema = z.object({ fullName: z.string().min(2).max(120) });
 const changePasswordSchema = z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(8).max(256) });
 const changeEmailSchema = z.object({ newEmail: z.string().email().max(254), currentPassword: z.string().min(1) });
 const deleteAccountSchema = z.object({ currentPassword: z.string().min(1) });
+
+/** Issues a verification link for the user's current address and emails it (best effort). */
+async function sendVerificationEmail(userId: string): Promise<void> {
+  try {
+    const issued = await requestEmailVerification.execute(UserId(userId));
+    if (issued) {
+      notifyBestEffort({
+        type: "email_verification",
+        recipientEmail: issued.email,
+        verifyUrl: `${config.dashboardUrl}/verify-email/${issued.rawToken}`,
+      });
+    }
+  } catch {
+    // Never fail the caller's request because an email could not be queued.
+  }
+}
 
 function currentSessionHash(req: Request): string | undefined {
   const token = req.cookies?.sid;
@@ -202,6 +231,8 @@ authRouter.post("/me/email", authRateLimiter, requireInteractiveSession, async (
     // Tell the OLD address: if the account was hijacked, that is the only inbox the owner still controls.
     notifyBestEffort({ type: "security_notice", recipientEmail: result.oldEmail, change: "email_changed" });
     auditBestEffort({ actorId: req.userId, action: "USER_EMAIL_CHANGED", resourceType: "User", resourceId: req.userId });
+    // The new address starts unverified: send the link there.
+    await sendVerificationEmail(req.userId!);
     res.json({ email: result.newEmail });
   } catch (err) {
     next(err);
@@ -260,6 +291,27 @@ authRouter.delete("/me", authRateLimiter, requireInteractiveSession, async (req,
     notifyBestEffort({ type: "security_notice", recipientEmail: deleted.email, change: "account_deleted" });
     auditBestEffort({ actorId: null, action: "USER_ACCOUNT_DELETED", resourceType: "User", resourceId: req.userId });
     res.clearCookie("sid", cookieOptions);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.post("/email-verification/request", authRateLimiter, requireInteractiveSession, async (req, res, next) => {
+  try {
+    await sendVerificationEmail(req.userId!);
+    // Same answer whether or not a mail was sent (already verified, queue failure, ...).
+    res.status(202).json({ message: "If your email is not verified yet, a verification link has been sent." });
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.post("/email-verification/confirm", authRateLimiter, async (req, res, next) => {
+  try {
+    const { token } = z.object({ token: z.string().min(10).max(200) }).parse(req.body);
+    const { userId } = await confirmEmailVerification.execute(token);
+    auditBestEffort({ actorId: userId, action: "USER_EMAIL_VERIFIED", resourceType: "User", resourceId: userId });
     res.status(204).send();
   } catch (err) {
     next(err);

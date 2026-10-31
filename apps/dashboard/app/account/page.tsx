@@ -22,6 +22,8 @@ export default function AccountPage() {
 
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  // Only an explicit `false` shows the banner, so an older API that omits the field stays quiet.
+  const [emailUnverified, setEmailUnverified] = useState(false);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -52,6 +54,7 @@ export default function AccountPage() {
     const [me, list] = await Promise.all([api.me(), api.listSessions()]);
     setEmail(me.email);
     setFullName(me.fullName);
+    setEmailUnverified(me.emailVerified === false);
     setSessions(list);
   }, []);
 
@@ -147,6 +150,16 @@ export default function AccountPage() {
       "sessions.closeOthersError"
     );
 
+  const resendVerification = () =>
+    run(
+      "verify",
+      async () => {
+        await api.requestEmailVerification();
+        setNotice(tRef.current("email.resent"));
+      },
+      "email.resendError"
+    );
+
   const removeAccount = (event: React.FormEvent) => {
     event.preventDefault();
     return run(
@@ -190,6 +203,15 @@ export default function AccountPage() {
           <p className={styles.muted}>{t("account.loading")}</p>
         ) : (
           <div className={styles.stack}>
+            {emailUnverified && (
+              <section className={styles.panel} aria-label={t("email.title")} role="status">
+                <p className={styles.hint}>{t("email.unverified")}</p>
+                <button type="button" className={`${styles.button} ${styles.primary}`} onClick={resendVerification} disabled={busy !== null}>
+                  {busy === "verify" ? t("email.resending") : t("email.resend")}
+                </button>
+              </section>
+            )}
+
             <section className={styles.panel} aria-label={t("profile.title")}>
               <h2 className={styles.panelTitle}>{t("profile.title")}</h2>
               <form className={styles.form} onSubmit={saveProfile}>

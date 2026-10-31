@@ -437,6 +437,17 @@ export const en = {
   "plans.reactivate": "Reactivate",
   "plans.eyebrow": "Commercial catalog",
   "plans.note": "Everything is yours: names, prices and quotas are defined by you. Editing a price does not affect subscriptions that are already active.",
+
+  // Email verification
+  "email.unverified": "Your email address is not verified yet. Check your inbox or request a new link.",
+  "email.resend": "Resend verification email",
+  "email.resending": "Sending…",
+  "email.resent": "If your email is not verified yet, a verification link has been sent.",
+  "email.resendError": "We could not send the verification email.",
+  "verify.confirming": "Verifying your email…",
+  "verify.done": "Your email address is verified.",
+  "verify.error": "This verification link is invalid or has expired.",
+  "verify.toConsole": "Go to the console",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -871,6 +882,17 @@ export const es: Messages = {
   "plans.reactivate": "Reactivar",
   "plans.eyebrow": "Catálogo comercial",
   "plans.note": "Todo es tuyo: nombres, precios y cuotas son definidos por vos. Editar el precio no afecta suscripciones ya activas.",
+
+  // Email verification
+  "email.unverified": "Tu dirección de email todavía no está verificada. Revisa tu bandeja o solicita un nuevo enlace.",
+  "email.resend": "Reenviar email de verificación",
+  "email.resending": "Enviando…",
+  "email.resent": "Si tu email aún no está verificado, enviamos un enlace de verificación.",
+  "email.resendError": "No pudimos enviar el email de verificación.",
+  "verify.confirming": "Verificando tu email…",
+  "verify.done": "Tu dirección de email está verificada.",
+  "verify.error": "El enlace de verificación es inválido o expiró.",
+  "verify.toConsole": "Ir a la consola",
 };
 
 export const catalogues = { en: en as Messages, es } as const;

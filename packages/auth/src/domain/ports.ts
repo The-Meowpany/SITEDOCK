@@ -49,3 +49,11 @@ export interface AccountDeletionRepository {
   findSoleOwnerWorkspaceIds(userId: UserId): Promise<string[]>;
   deleteUser(userId: UserId): Promise<void>;
 }
+
+export interface EmailVerificationRepository {
+  create(params: { userId: UserId; email: string; tokenHash: string; expiresAt: Date }): Promise<void>;
+  findValidByTokenHash(tokenHash: string): Promise<{ userId: UserId; email: string } | null>;
+  markUsed(tokenHash: string): Promise<void>;
+  /** Burns every unused token of the user so only the most recently issued link works. */
+  invalidateOutstanding(userId: UserId): Promise<void>;
+}

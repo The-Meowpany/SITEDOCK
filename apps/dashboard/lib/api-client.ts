@@ -268,7 +268,14 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
 
-  me: () => request<{ id: string; email: string; fullName: string }>("/api/v1/auth/me"),
+  me: () =>
+    request<{ id: string; email: string; fullName: string; emailVerified?: boolean }>("/api/v1/auth/me"),
+
+  requestEmailVerification: () =>
+    request<{ message: string }>("/api/v1/auth/email-verification/request", { method: "POST" }),
+
+  confirmEmailVerification: (token: string) =>
+    request<void>("/api/v1/auth/email-verification/confirm", { method: "POST", body: JSON.stringify({ token }) }),
 
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
 

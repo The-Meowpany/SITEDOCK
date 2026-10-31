@@ -35,6 +35,13 @@ export function renderEmail(event: NotificationEvent): RenderedEmail {
       };
     }
 
+    case "email_verification":
+      return {
+        to: event.recipientEmail,
+        subject: "Verify your SiteDock email address",
+        body: `Confirm this email address for your SiteDock account using this link within 24 hours: ${event.verifyUrl}. If you did not create or change an account, ignore this email.`,
+      };
+
     case "password_reset":
       return {
         to: event.recipientEmail,
