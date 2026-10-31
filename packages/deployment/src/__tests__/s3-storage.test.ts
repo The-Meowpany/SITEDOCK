@@ -6,7 +6,7 @@ const CONFIG = {
   bucket: "sitedock-test",
   region: "us-east-1",
   accessKeyId: "AKIDEXAMPLE",
-  secretAccessKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", // clave de ejemplo pública de AWS docs
+  secretAccessKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", // public example key from the AWS docs
 };
 
 interface CapturedCall {

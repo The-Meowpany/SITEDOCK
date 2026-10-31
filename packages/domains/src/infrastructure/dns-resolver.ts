@@ -50,9 +50,40 @@ const CODE_BY_TYPE: Record<DnsQueryType, number> = {
 
 /** TXT answers can be split into multiple quoted strings; join them. */
 export function parseTxtAnswer(data: string): string {
-  const matches = [...data.matchAll(/"((?:[^"\\]|\\.)*)"/g)];
-  if (matches.length === 0) return data.replace(/^"|"$/g, "");
-  return matches.map((m) => (m[1] ?? "").replace(/\\"/g, '"').replace(/\\\\/g, "\\")).join("");
+  // Single linear pass. The previous global regex rescanned to the end of the
+  // input from every unmatched quote (polynomial time on hostile resolver data).
+  const parts: string[] = [];
+  let i = 0;
+  while (i < data.length) {
+    if (data[i] !== '"') {
+      i++;
+      continue;
+    }
+    let j = i + 1;
+    let buf = "";
+    let closed = false;
+    while (j < data.length) {
+      const c = data[j]!;
+      if (c === "\\") {
+        const next = data[j + 1];
+        if (next === undefined) break;
+        buf += next === '"' || next === "\\" ? next : c + next;
+        j += 2;
+        continue;
+      }
+      if (c === '"') {
+        closed = true;
+        break;
+      }
+      buf += c;
+      j++;
+    }
+    if (!closed) break;
+    parts.push(buf);
+    i = j + 1;
+  }
+  if (parts.length === 0) return data.replace(/^"|"$/g, "");
+  return parts.join("");
 }
 
 export class DohDnsResolver implements DnsResolver {

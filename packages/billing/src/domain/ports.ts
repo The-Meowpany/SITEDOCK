@@ -34,12 +34,12 @@ export interface InvoiceRepository {
 
 export interface PaymentRepository {
   findById(id: string): Promise<Payment | null>;
-  /** Resolución por referencia del provider — la usa refund/dispute webhooks. */
+  /** Resolution by provider reference — used by refund/dispute webhooks. */
   findByExternalPaymentId(provider: string, externalPaymentId: string): Promise<Payment | null>;
   save(payment: Payment): Promise<void>;
 }
 
-// ── Fase 16 — movimientos de dinero reales ────────────────
+// ── Phase 16 — real money movements ──────────────────────
 
 export interface RefundRecord {
   id: string;

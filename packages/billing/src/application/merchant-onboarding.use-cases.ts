@@ -5,7 +5,7 @@ import {
   ConnectedAccountState,
 } from "../domain/money-gateways";
 
-// ── Puerto de persistencia (infraestructura Prisma lo implementa) ──
+// ── Persistence port (implemented by the Prisma infrastructure) ──
 
 export type ConnectedAccountStatus = "PENDING_ONBOARDING" | "ACTIVE" | "RESTRICTED" | "DISCONNECTED";
 
@@ -29,9 +29,9 @@ export interface ConnectedAccountRepository {
 // ── Casos de uso ─────────────────────────────────────────
 
 /**
- * Inicia el onboarding del merchant (freelancer) con Stripe Connect Express:
- * crea la cuenta conectada si no existe y devuelve el link hosted de KYC/KYB.
- * SiteDock nunca toca documentos del merchant — eso vive en Stripe.
+ * Starts merchant (freelancer) onboarding with Stripe Connect Express:
+ * creates the connected account if it does not exist and returns the hosted KYC/KYB link.
+ * SiteDock never touches the merchant's documents — those live in Stripe.
  */
 export class StartMerchantOnboardingUseCase {
   constructor(
@@ -49,7 +49,7 @@ export class StartMerchantOnboardingUseCase {
     const existing = await this.accounts.findByWorkspaceId(workspaceId);
 
     if (existing?.status === "ACTIVE") {
-      // Ya cobrando — re-link solo si necesita actualizar datos.
+      // Already collecting — re-link only if the data needs updating.
       const link = await this.gateway.createOnboardingLink(
         existing.externalAccountId,
         params.returnUrl,
@@ -86,8 +86,8 @@ export class StartMerchantOnboardingUseCase {
 }
 
 /**
- * Sincroniza el estado del merchant desde `account.updated` (webhook) o desde
- * una consulta directa al gateway. La autoridad es SIEMPRE el estado externo.
+ * Syncs the merchant state from `account.updated` (webhook) or from
+ * a direct gateway query. The authority is ALWAYS the external state.
  */
 export class SyncConnectedAccountStatusUseCase {
   constructor(

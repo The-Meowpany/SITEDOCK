@@ -12,8 +12,8 @@ export interface AuditEntryProps {
 }
 
 /**
- * AuditEntry — append-only by design (docs/ARCHITECTURE.md §33: "Los audit
- * logs no deben modificarse arbitrariamente"). Unlike every other aggregate in
+ * AuditEntry — append-only by design (docs/ARCHITECTURE.md §33: "Audit
+ * logs must not be modified arbitrarily"). Unlike every other aggregate in
  * this codebase, AuditEntry has NO behavior methods and NO setters at all —
  * once created, it cannot be mutated, only read. There is deliberately no
  * `update()` or `delete()` anywhere in this bounded context.

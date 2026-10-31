@@ -12,3 +12,10 @@ backups/
 *.crt
 *.key
 docker-compose.override.yml
+
+# Local/test env files (may hold provider credentials and DB URLs)
+.env.*
+!.env.example
+*.local.test
+.env.test.local
+compose-run.log

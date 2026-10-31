@@ -5,12 +5,11 @@ import {
   PrismaWorkspaceRepository,
 } from "@sitedock/workspace";
 import { PrismaWebsiteRepository } from "@sitedock/website";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@sitedock/database";
 
 const assertWorkspaceAccess = new AssertWorkspaceAccessUseCase(new PrismaWorkspaceRepository());
 const clients = new PrismaClientRepository();
 const websites = new PrismaWebsiteRepository();
-const prisma = new PrismaClient();
 
 export interface AccessContext {
   role: "OWNER" | "ADMIN" | "DEVELOPER" | "CLIENT";

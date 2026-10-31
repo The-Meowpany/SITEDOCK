@@ -515,6 +515,29 @@ async function createContainer(body) {
   return { ...summary, id, reused: false };
 }
 
+/** Reads at most `maxBytes` of a response body, then cancels the stream. */
+async function readCapped(res, maxBytes) {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(Buffer.from(value));
+      total += value.length;
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      /* stream already closed */
+    }
+  }
+  return Buffer.concat(chunks).subarray(0, maxBytes).toString("utf8");
+}
+
 async function containerHealth(nameOrId, searchParams) {
   const path = searchParams.get("path") ?? "/health";
   if (!path.startsWith("/") || path.length > 512 || /[\r\n]/.test(path)) {
@@ -534,7 +557,7 @@ async function containerHealth(nameOrId, searchParams) {
       signal: controller.signal,
       redirect: "manual",
     });
-    const body = (await res.text()).slice(0, 4096);
+    const body = await readCapped(res, 4096);
     return {
       healthy: res.status >= 200 && res.status < 400,
       statusCode: res.status,

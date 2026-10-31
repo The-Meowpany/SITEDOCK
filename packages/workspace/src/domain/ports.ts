@@ -22,3 +22,14 @@ export interface WorkspaceInvitationRepository {
 export interface WorkspaceStaffDirectory {
   listStaffEmails(workspaceId: WorkspaceId): Promise<string[]>;
 }
+
+/**
+ * Destructive/structural operations kept off WorkspaceRepository so `save()` can stay
+ * an idempotent upsert: a stale aggregate snapshot must never be able to delete members.
+ */
+export interface WorkspaceLifecycleRepository {
+  /** Deletes exactly one membership row and refuses (rolling back) if it would leave the workspace without an owner. */
+  removeMember(workspaceId: WorkspaceId, userId: UserId): Promise<void>;
+  /** Deletes the workspace only if it has no projects or websites; otherwise throws ConflictError. */
+  deleteIfEmpty(workspaceId: WorkspaceId): Promise<void>;
+}

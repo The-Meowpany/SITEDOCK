@@ -11,7 +11,7 @@ const storage = createStorageProviderFromEnv().storage;
 const cleanup = new CleanupExpiredBackupsUseCase(backups, storage);
 
 /**
- * Scheduled job (brief §29 "retención configurable" + "eliminación segura"):
+ * Scheduled job (brief §29 "configurable retention" + "secure deletion"):
  * deletes expired backups' storage objects first, then their rows. Safe to
  * re-run — expired rows disappear on the first successful pass, so the next
  * run finds nothing.

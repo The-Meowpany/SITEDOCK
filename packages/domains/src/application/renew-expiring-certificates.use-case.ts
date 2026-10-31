@@ -8,8 +8,8 @@ export interface SslRenewalResult {
 }
 
 /**
- * Scheduled-job use case (docs/ARCHITECTURE.md §31 / brief §17 "SSL próximo a
- * vencer → renovar automáticamente"). Finds VERIFIED domains whose SSL
+ * Scheduled-job use case (docs/ARCHITECTURE.md §31 / brief §17 "SSL about to
+ * expire → renew automatically"). Finds VERIFIED domains whose SSL
  * certificate expires inside the window and re-issues through the
  * DomainProvider — the same port used for the first issuance, so a real DNS/
  * ACME provider slots in without touching this code.

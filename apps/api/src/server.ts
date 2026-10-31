@@ -4,8 +4,8 @@ import { logger } from "./logger";
 
 const errors = validateProductionConfig(process.env, config.isProduction);
 if (errors.length > 0) {
-  // Fase 19 §7 — fail closed: producción con configuración de provider pedida
-  // pero incompleta NO arranca con mocks silenciosos.
+  // Phase 19 §7 — fail closed: production with a requested provider
+  // configuration that is incomplete does NOT start with silent mocks.
   for (const e of errors) logger.fatal({ configError: e }, "Invalid production configuration");
   process.exit(1);
 }

@@ -42,7 +42,7 @@ describe("verifyStripeSignature (esquema real de Stripe)", () => {
 
   it("rechaza timestamps fuera de tolerancia (replay)", () => {
     const body = Buffer.from("{}");
-    const stale = Math.floor(Date.now() / 1000) - 3600; // 1 hora atrás
+    const stale = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
     expect(verifyStripeSignature(body, sign(body.toString(), SECRET, stale), SECRET)).toMatchObject({
       valid: false,
       reason: "TIMESTAMP_OUT_OF_TOLERANCE",

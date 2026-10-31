@@ -20,8 +20,8 @@ import { config } from "./config";
 import { paymentProvider as mockProviderSingleton } from "./payment-provider";
 
 /**
- * Fase 16 — fábrica del origen del dinero (ADR-006). El pipeline
- * verify→claim→process es ÚNICO; cambia solo el adapter de entrada:
+ * Phase 16 — factory for the origin of money (ADR-006). The pipeline
+ * verify→claim→process is SINGLE; only the inbound adapter changes:
  *
  *   PAYMENT_PROVIDER=mock   → MockPaymentProvider (demo, sin credenciales)
  *   PAYMENT_PROVIDER=stripe → StripePaymentProvider + gateways reales
@@ -58,12 +58,12 @@ export const connectedAccountGateway = stripe ? stripe.connectedAccounts : null;
 export const reconciliationSource = stripe ? stripe.reconciliation : null;
 
 /**
- * Simulador DEMO — existe solo cuando el provider activo es el mock.
- * Las rutas /demo-payments y /public/demo-checkout lo exigen (404 si no).
+ * DEMO simulator — exists only when the active provider is the mock.
+ * The /demo-payments and /public/demo-checkout routes require it (404 otherwise).
  */
 export const demoSimulator: MockPaymentProvider | null = useStripe ? null : mockProviderSingleton;
 
-// ── Persistencia compartida ──────────────────────────────
+// ── Shared persistence ──────────────────────────────────
 
 export const subscriptions = new PrismaSubscriptionRepository();
 export const plans = new PrismaServicePlanRepository();
@@ -74,7 +74,7 @@ export const projectCharges = new PrismaProjectChargeRepository();
 export const feePolicy = new FlatPercentageFeePolicy(config.platformFeePercentage);
 export const reconciliationLedger = new PrismaReconciliationLedger();
 
-// ── Pipeline único de dinero ─────────────────────────────
+// ── Single money pipeline ────────────────────────────────
 
 export const processWebhook = new ProcessPaymentWebhookUseCase(
   subscriptions,

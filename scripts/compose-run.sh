@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
-cd /mnt/c/Users/filip/OneDrive/Documentos/SiteDock
-podman-compose up -d --build > /mnt/c/Users/filip/AppData/Local/Temp/opencode/compose-run.log 2>&1
-echo "EXIT:$?" >> /mnt/c/Users/filip/AppData/Local/Temp/opencode/compose-run.log
+# Starts the stack with podman-compose and records the output and exit code in a log file.
+# Usage: scripts/compose-run.sh            (log: ./compose-run.log)
+#        COMPOSE_LOG=/tmp/x.log scripts/compose-run.sh
+set -u
+cd "$(dirname "$0")/.."
+LOG="${COMPOSE_LOG:-compose-run.log}"
+podman-compose up -d --build > "$LOG" 2>&1
+echo "EXIT:$?" >> "$LOG"

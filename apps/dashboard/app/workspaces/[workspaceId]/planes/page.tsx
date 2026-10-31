@@ -1,28 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import type { PlanDetail, PlanKind } from "@/lib/api-client";
 import { ApiError } from "@/lib/api-error";
 import { Field, btnDanger, btnGhost, btnPrimary, inputClass, selectClass } from "@/components/ui";
+import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n";
 import styles from "./page.module.css";
 
-const KIND_LABEL: Record<PlanKind, string> = {
-  HOSTING: "Hosting + infraestructura",
-  MAINTENANCE: "Tiers de mantenimiento",
+const KIND_LABEL_KEY: Record<PlanKind, MessageKey> = {
+  HOSTING: "money.hosting",
+  MAINTENANCE: "plans.kind.MAINTENANCE",
 };
 
 type Draft = {
   name: { HOSTING: string; MAINTENANCE: string };
   price: { HOSTING: string; MAINTENANCE: string };
   interval: { HOSTING: "MONTHLY" | "YEARLY"; MAINTENANCE: "MONTHLY" | "YEARLY" };
-  quota: string; // solo MAINTENANCE; "" = ilimitado
+  quota: string; // MAINTENANCE only; "" = unlimited
 };
 
 export default function PlansPage() {
   const params = useParams<{ workspaceId: string }>();
   const router = useRouter();
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const workspaceId = params.workspaceId;
 
   const [plans, setPlans] = useState<PlanDetail[] | null>(null);
@@ -50,7 +55,7 @@ export default function PlansPage() {
           router.replace(`/login?returnTo=/workspaces/${workspaceId}/planes`);
           return;
         }
-        setError(err instanceof Error ? err.message : "No pudimos cargar los planes.");
+        setError(err instanceof Error ? err.message : tRef.current("plans.loadError"));
       });
   }, [workspaceId, router]);
 
@@ -63,10 +68,10 @@ export default function PlansPage() {
     const name = draft.name[kind].trim();
     const price = draft.price[kind].trim();
 
-    if (name.length < 2) return setError("El nombre necesita al menos 2 caracteres.");
-    if (!/^\d+(\.\d{1,2})?$/.test(price)) return setError("El precio debe ser un monto válido (ej: 29.00).");
+    if (name.length < 2) return setError(t("plans.nameShort"));
+    if (!/^\d+(\.\d{1,2})?$/.test(price)) return setError(t("plans.priceInvalid"));
     if (kind === "MAINTENANCE" && draft.quota !== "" && (!/^\d+$/.test(draft.quota))) {
-      return setError("La cuota debe ser un número entero o vacío para ilimitado.");
+      return setError(t("plans.quotaInvalid"));
     }
 
     setBusy(`create-${kind}`);
@@ -83,7 +88,7 @@ export default function PlansPage() {
       setDraft((d) => ({ ...d, name: { ...d.name, [kind]: "" }, price: { ...d.price, [kind]: "" }, quota: "" }));
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos crear el plan.");
+      setError(err instanceof Error ? err.message : t("plans.createError"));
     } finally {
       setBusy(null);
     }
@@ -113,7 +118,7 @@ export default function PlansPage() {
       setEditingId(null);
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos guardar los cambios.");
+      setError(err instanceof Error ? err.message : t("plans.saveError"));
     } finally {
       setBusy(null);
     }
@@ -125,7 +130,7 @@ export default function PlansPage() {
       await api.updatePlan(workspaceId, plan.id, { active: !plan.active });
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos cambiar el estado.");
+      setError(err instanceof Error ? err.message : t("plans.toggleError"));
     } finally {
       setBusy(null);
     }
@@ -134,8 +139,8 @@ export default function PlansPage() {
   function section(kind: PlanKind) {
     const list = plans?.filter((p) => p.kind === kind) ?? [];
     return (
-      <section className={styles.panel} aria-label={KIND_LABEL[kind]}>
-        <h2 className={styles.panelTitle}>{KIND_LABEL[kind]}</h2>
+      <section className={styles.panel} aria-label={t(KIND_LABEL_KEY[kind])}>
+        <h2 className={styles.panelTitle}>{t(KIND_LABEL_KEY[kind])}</h2>
 
         <form
           className={styles.createForm}
@@ -144,15 +149,15 @@ export default function PlansPage() {
             handleCreate(kind);
           }}
         >
-          <Field label="Nombre">
+          <Field label={t("plans.name")}>
             <input
               className={inputClass}
-              placeholder={kind === "MAINTENANCE" ? "Ej: Pro — 6 cambios/mes" : "Ej: Hosting estándar"}
+              placeholder={kind === "MAINTENANCE" ? t("plans.namePlaceholderMaintenance") : t("plans.namePlaceholderHosting")}
               value={draft.name[kind]}
               onChange={(e) => setDraft((d) => ({ ...d, name: { ...d.name, [kind]: e.target.value } }))}
             />
           </Field>
-          <Field label="Precio (USD)">
+          <Field label={t("plans.price")}>
             <input
               className={inputClass}
               placeholder="29.00"
@@ -161,7 +166,7 @@ export default function PlansPage() {
               onChange={(e) => setDraft((d) => ({ ...d, price: { ...d.price, [kind]: e.target.value } }))}
             />
           </Field>
-          <Field label="Período">
+          <Field label={t("plans.interval")}>
             <select
               className={selectClass}
               value={draft.interval[kind]}
@@ -172,15 +177,15 @@ export default function PlansPage() {
                 }))
               }
             >
-              <option value="MONTHLY">Mensual</option>
-              <option value="YEARLY">Anual</option>
+              <option value="MONTHLY">{t("plans.monthly")}</option>
+              <option value="YEARLY">{t("plans.yearly")}</option>
             </select>
           </Field>
           {kind === "MAINTENANCE" && (
-            <Field label="Cambios incluidos/mes">
+            <Field label={t("plans.quotaLabel")}>
               <input
                 className={inputClass}
-                placeholder="vacío = ilimitado"
+                placeholder={t("plans.quotaPlaceholder")}
                 inputMode="numeric"
                 value={draft.quota}
                 onChange={(e) => setDraft((d) => ({ ...d, quota: e.target.value }))}
@@ -188,31 +193,31 @@ export default function PlansPage() {
             </Field>
           )}
           <button className={btnPrimary} type="submit" disabled={busy === `create-${kind}`}>
-            {busy === `create-${kind}` ? "Creando…" : "Crear"}
+            {busy === `create-${kind}` ? t("sites.creating") : t("plans.create")}
           </button>
         </form>
 
         <ul className={styles.planList}>
-          {list.length === 0 && <li className={styles.empty}>Todavía no creaste planes de este tipo.</li>}
+          {list.length === 0 && <li className={styles.empty}>{t("plans.empty")}</li>}
           {list.map((plan) => (
             <li key={plan.id} className={`${styles.planRow} ${plan.active ? "" : styles.inactive}`}>
               {editingId === plan.id ? (
                 <div className={styles.editGrid}>
-                  <input className={inputClass} value={editName} onChange={(e) => setEditName(e.target.value)} aria-label="Nombre" />
-                  <input className={inputClass} value={editPrice} onChange={(e) => setEditPrice(e.target.value)} aria-label="Precio" />
+                  <input className={inputClass} value={editName} onChange={(e) => setEditName(e.target.value)} aria-label={t("plans.name")} />
+                  <input className={inputClass} value={editPrice} onChange={(e) => setEditPrice(e.target.value)} aria-label={t("plans.priceAria")} />
                   {plan.kind === "MAINTENANCE" && (
                     <input
                       className={inputClass}
                       value={editQuota}
-                      placeholder="vacío = ilimitado"
+                      placeholder={t("plans.quotaPlaceholder")}
                       onChange={(e) => setEditQuota(e.target.value)}
-                      aria-label="Cuota mensual"
+                      aria-label={t("plans.quotaAria")}
                     />
                   )}
                   <div className={styles.rowActions}>
-                    <button className={btnGhost} onClick={() => setEditingId(null)}>Cancelar</button>
+                    <button className={btnGhost} onClick={() => setEditingId(null)}>{t("charge.cancel")}</button>
                     <button className={btnPrimary} disabled={busy === `save-${plan.id}`} onClick={() => saveEdit(plan)}>
-                      {busy === `save-${plan.id}` ? "…" : "Guardar"}
+                      {busy === `save-${plan.id}` ? "…" : t("plans.save")}
                     </button>
                   </div>
                 </div>
@@ -221,18 +226,18 @@ export default function PlansPage() {
                   <div className={styles.planInfo}>
                     <strong>{plan.name}</strong>
                     <span className={styles.mono}>
-                      ${plan.priceDecimal} {plan.currency}/{plan.billingInterval === "MONTHLY" ? "mes" : "año"}
+                      ${plan.priceDecimal} {plan.currency}/{plan.billingInterval === "MONTHLY" ? t("sub.perMonth") : t("sub.perYear")}
                       {plan.kind === "MAINTENANCE" &&
-                        (plan.includedRequestQuota === null ? " · cambios ilimitados" : ` · ${plan.includedRequestQuota} cambios/mes`)}
+                        ` · ${plan.includedRequestQuota === null ? t("plans.unlimitedChanges") : t("sub.changesPerMonth", { count: plan.includedRequestQuota })}`}
                     </span>
                   </div>
                   <div className={styles.rowActions}>
-                    {!plan.active && <span className={styles.inactiveTag}>inactivo</span>}
+                    {!plan.active && <span className={styles.inactiveTag}>{t("plans.inactive")}</span>}
                     <button className={btnGhost} onClick={() => startEdit(plan)} disabled={!!editingId}>
-                      Editar
+                      {t("plans.edit")}
                     </button>
                     <button className={btnDanger} disabled={!!editingId || busy === `toggle-${plan.id}`} onClick={() => toggleActive(plan)}>
-                      {busy === `toggle-${plan.id}` ? "…" : plan.active ? "Desactivar" : "Reactivar"}
+                      {busy === `toggle-${plan.id}` ? "…" : plan.active ? t("plans.deactivate") : t("plans.reactivate")}
                     </button>
                   </div>
                 </>
@@ -248,11 +253,11 @@ export default function PlansPage() {
     <>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Catálogo comercial</p>
-          <h1 className={styles.title}>Planes y tiers</h1>
+          <p className={styles.eyebrow}>{t("plans.eyebrow")}</p>
+          <h1 className={styles.title}>{t("nav.plans")}</h1>
         </div>
         <span className={styles.dim}>
-          Todo es tuyo: nombres, precios y cuotas son definidos por vos. Editar el precio no afecta suscripciones ya activas.
+          {t("plans.note")}
         </span>
       </header>
 

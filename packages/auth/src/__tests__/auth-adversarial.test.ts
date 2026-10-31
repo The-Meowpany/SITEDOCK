@@ -116,7 +116,7 @@ describe("Authentication adversarial campaign", () => {
       void login.execute({ email: "real@test.com", password: "wrongpass" }).catch((e) => { realMsg = (e as Error).message; });
     } catch { /* sync throw */ }
 
-    // Ambos errores deben tener el mismo mensaje genérico
+    // Both errors must carry the same generic message
     if (ghostMsg && realMsg) expect(ghostMsg).toBe(realMsg);
   });
 });

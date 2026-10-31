@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 import styles from "./page.module.css";
 
 /**
@@ -12,6 +13,9 @@ import styles from "./page.module.css";
  */
 export default function HomePage() {
   const router = useRouter();
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,7 +27,7 @@ export default function HomePage() {
         if (cancelled) return;
         const staff = workspaces.filter((w) => w.role !== "CLIENT");
         if (staff.length === 0) {
-          setError("Tu cuenta no pertenece a ningún workspace como developer.");
+          setError(tRef.current("home.noWorkspace"));
           return;
         }
         router.replace(`/workspaces/${staff[0]!.id}`);
@@ -40,7 +44,7 @@ export default function HomePage() {
 
   return (
     <main className={styles.page}>
-      <p className={styles.hint}>{error ?? "Abriendo tu consola…"}</p>
+      <p className={styles.hint}>{error ?? t("home.opening")}</p>
     </main>
   );
 }

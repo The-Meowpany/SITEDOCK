@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Entrypoint de la API: corre migraciones antes de arrancar el servidor.
+// Entrypoint of the API: runs migrations before starting the server.
 import { execSync } from "child_process";
 import { createApp } from "./app";
 
 const PORT = Number(process.env.PORT) || 4000;
 
-// 1. Ejecutar migraciones de Prisma (idempotente, seguro en cada arranque)
+// 1. Run Prisma migrations (idempotent, safe on every start)
 try {
   console.log("[api] Ejecutando migraciones de base de datos...");
   execSync("npx prisma migrate deploy --schema packages/database/schema.prisma", {
@@ -18,7 +18,7 @@ try {
   process.exit(1);
 }
 
-// 2. Generar cliente de Prisma si no existe
+// 2. Generate the Prisma client if it does not exist
 try {
   execSync("npx prisma generate --schema packages/database/schema.prisma", {
     stdio: "inherit",
@@ -28,7 +28,7 @@ try {
   process.exit(1);
 }
 
-// 3. Arrancar el servidor
+// 3. Start the server
 const app = createApp();
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`[api] Escuchando en http://0.0.0.0:${PORT}`);

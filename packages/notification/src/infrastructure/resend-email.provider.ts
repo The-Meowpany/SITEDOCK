@@ -4,7 +4,7 @@ import type { RenderedEmail } from "../domain/templates";
 
 export interface ResendEmailProviderConfig {
   apiKey: string;
-  /** Remitente verificado en Resend (ej: "SiteDock <notificaciones@tudominio.com>"). */
+  /** Verified sender in Resend (e.g. "SiteDock <notifications@yourdomain.com>"). */
   from: string;
   apiBase?: string;
   fetchImpl?: typeof fetch;
@@ -16,8 +16,8 @@ interface ResendSendResponse {
 }
 
 /**
- * Provider REAL de email sobre Resend (ADR-003). Mismo port que el mock —
- * NotificationService no cambia una línea. HTTP inyectado para tests offline.
+ * REAL email provider over Resend (ADR-003). Same port as the mock —
+ * NotificationService does not change a line. HTTP injected for offline tests.
  */
 export class ResendEmailProvider implements EmailProvider {
   private readonly base: string;
@@ -62,7 +62,7 @@ export class ResendEmailProvider implements EmailProvider {
 
       if (!res.ok) {
         throw new InfrastructureError(
-          `Resend rechazó el envío (${res.status}): ${body?.message ?? "sin detalle"}`,
+          `Resend rejected the send (${res.status}): ${body?.message ?? "no details"}`,
           "EMAIL_SEND_FAILED"
         );
       }

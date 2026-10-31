@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { ApplicationError, NotFoundError, SecretCipher } from "@sitedock/shared";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@sitedock/database";
 import {
   CreateServiceUseCase,
   EnqueueServiceDeploymentUseCase,
@@ -22,7 +22,6 @@ import {
 import { PrismaProjectRepository } from "@sitedock/website";
 import { requireSession } from "../middleware/require-session";
 
-const prisma = new PrismaClient();
 
 const serviceRepository = new PrismaServiceRepository();
 const serviceDeploymentRepository = new PrismaServiceDeploymentRepository();

@@ -12,7 +12,7 @@ export interface WorkspaceProps {
   id: WorkspaceId;
   name: string;
   slug: string;
-  /** White-label: branding opcional por workspace (nombre visible, logo, color). */
+  /** White-label: optional branding per workspace (display name, logo, color). */
   branding: Record<string, unknown> | null;
   members: WorkspaceMemberProps[];
   createdAt: Date;
@@ -28,7 +28,7 @@ function slugify(name: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-// ── Branding validation (Fase 21 §6/§8) ──────────────────
+// ── Branding validation (Phase 21 §6/§8) ──────────────────
 
 const BRANDING_MAX_KEYS = 20;
 const BRANDING_MAX_STRING_LENGTH = 500;
@@ -44,7 +44,7 @@ export const DANGEROUS_PATTERNS = [
   /data:text\/html/i,
 ];
 
-/** Keys que permiten prototype pollution si se almacenan en un objeto JS. */
+/** Keys that allow prototype pollution if stored in a JS object. */
 const FORBIDDEN_BRANDING_KEYS = new Set([
   "__proto__",
   "constructor",
@@ -156,6 +156,58 @@ export class Workspace {
     }
     this.props.members.push({ userId, role, joinedAt: null });
     this.props.updatedAt = new Date();
+  }
+
+  rename(name: string): void {
+    if (name.trim().length < 2) {
+      throw new DomainError("Workspace name must have at least 2 characters", "INVALID_WORKSPACE_NAME");
+    }
+    this.props.name = name.trim();
+    this.props.updatedAt = new Date();
+  }
+
+  /** The OWNER role is never assigned here: use transferOwnership so there is always exactly one accountable owner. */
+  changeMemberRole(userId: UserId, role: Exclude<WorkspaceRole, "OWNER">): void {
+    const member = this.props.members.find((m) => m.userId === userId);
+    if (!member) throw new DomainError("User is not a member of this workspace", "NOT_A_MEMBER");
+    if (member.role === "OWNER") {
+      throw new DomainError("The owner's role can only change by transferring ownership", "OWNER_ROLE_PROTECTED");
+    }
+    member.role = role;
+    this.props.updatedAt = new Date();
+  }
+
+  removeMember(userId: UserId): void {
+    const member = this.props.members.find((m) => m.userId === userId);
+    if (!member) throw new DomainError("User is not a member of this workspace", "NOT_A_MEMBER");
+    if (member.role === "OWNER") {
+      throw new DomainError("The owner cannot be removed: transfer ownership first", "OWNER_ROLE_PROTECTED");
+    }
+    this.props.members = this.props.members.filter((m) => m.userId !== userId);
+    this.props.updatedAt = new Date();
+  }
+
+  /** Hands the workspace to an existing staff member; the previous owner becomes ADMIN (never loses access silently). */
+  transferOwnership(fromUserId: UserId, toUserId: UserId): void {
+    if (fromUserId === toUserId) {
+      throw new DomainError("The workspace already belongs to that user", "OWNERSHIP_UNCHANGED");
+    }
+    const from = this.props.members.find((m) => m.userId === fromUserId);
+    if (!from || from.role !== "OWNER") {
+      throw new DomainError("Only the current owner can transfer ownership", "NOT_OWNER");
+    }
+    const to = this.props.members.find((m) => m.userId === toUserId);
+    if (!to) throw new DomainError("The new owner must already be a member of the workspace", "NOT_A_MEMBER");
+    if (to.role === "CLIENT") {
+      throw new DomainError("A client cannot own a workspace", "INVALID_NEW_OWNER");
+    }
+    from.role = "ADMIN";
+    to.role = "OWNER";
+    this.props.updatedAt = new Date();
+  }
+
+  ownerCount(): number {
+    return this.props.members.filter((m) => m.role === "OWNER").length;
   }
 
   hasMember(userId: UserId): boolean {

@@ -3,9 +3,9 @@ import { LedgerSidePayment } from "../domain/money-gateways";
 import { ReconciliationLedgerPort } from "../application/money-movements.use-cases";
 
 /**
- * Lado LEDGER de la reconciliación (Fase 16 §4): pagos reales de un workspace,
- * resueltos por la cadena Payment → Invoice → Subscription → Website, que es
- * donde vive la frontera del tenant.
+ * LEDGER side of the reconciliation (Phase 16 §4): real payments of a workspace,
+ * resolved through the Payment → Invoice → Subscription → Website chain, which is
+ * where the tenant boundary lives.
  */
 export class PrismaReconciliationLedger implements ReconciliationLedgerPort {
   async listWorkspacePaymentsSince(workspaceId: string, since: Date): Promise<LedgerSidePayment[]> {

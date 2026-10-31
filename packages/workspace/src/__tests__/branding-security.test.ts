@@ -91,11 +91,11 @@ describe("Branding validation — XSS/injection rejection", () => {
   });
 });
 
-// ── Prototype pollution (Fase 24) ────────────────────────
+// ── Prototype pollution (Phase 24) ──────────────────────
 
 describe("Prototype pollution prevention", () => {
   it("rejects __proto__ arriving via JSON.parse (HTTP body)", () => {
-    // JSON.parse SÍ crea __proto__ como propiedad propia (a diferencia del literal).
+    // JSON.parse DOES create __proto__ as an own property (unlike the object literal).
     const malicious = JSON.parse('{"__proto__": {"isAdmin": true}, "name": "safe"}');
     expect(() => tryBranding(malicious)).toThrow(DomainError);
   });

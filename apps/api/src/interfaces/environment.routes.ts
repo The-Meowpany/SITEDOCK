@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { NotFoundError } from "@sitedock/shared";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@sitedock/database";
 import { AssertWorkspaceAccessUseCase, PrismaWorkspaceRepository } from "@sitedock/workspace";
 import { requireSession } from "../middleware/require-session";
 
-const prisma = new PrismaClient();
 const workspaceRepository = new PrismaWorkspaceRepository();
 const assertWorkspaceAccess = new AssertWorkspaceAccessUseCase(workspaceRepository);
 

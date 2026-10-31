@@ -200,7 +200,7 @@ export class VerifyCustomDomainUseCase {
 
 /**
  * Re-checks a domain that is already VERIFIED. Used by the dashboard's
- * "comprobar ahora" action and by the scheduled SSL renewal job.
+ * "check now" action and by the scheduled SSL renewal job.
  */
 export class CheckCustomDomainUseCase {
   constructor(

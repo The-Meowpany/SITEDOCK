@@ -1,50 +1,39 @@
+"use client";
+
 import styles from "./SubscriptionReceipt.module.css";
 import type { SubscriptionDetail } from "@/lib/api-client";
-
-const STATUS_LABEL: Record<SubscriptionDetail["status"], string> = {
-  INCOMPLETE: "Incompleta",
-  TRIALING: "Período de prueba",
-  ACTIVE: "Activa",
-  PAST_DUE: "Pago pendiente",
-  PAUSED: "Pausada",
-  GRACE_PERIOD: "Período de gracia",
-  SUSPENDED: "Suspendida",
-  CANCELED: "Cancelada",
-  EXPIRED: "Vencida",
-};
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" });
-}
+import { useI18n } from "@/lib/i18n";
 
 export function SubscriptionReceipt({ subscription }: { subscription: SubscriptionDetail | null }) {
+  const { t, formatDate } = useI18n();
+  const date = (iso: string | null) => (iso ? formatDate(iso) : "—");
+
   if (!subscription) {
-    return <p className={styles.empty}>Todavía no hay una suscripción activa para este sitio.</p>;
+    return <p className={styles.empty}>{t("sub.empty")}</p>;
   }
 
-  const intervalLabel = subscription.billingInterval === "MONTHLY" ? "mes" : "año";
+  const intervalLabel = subscription.billingInterval === "MONTHLY" ? t("sub.perMonth") : t("sub.perYear");
 
   return (
     <dl className={styles.receipt}>
       <div className={styles.line}>
-        <dt>Plan</dt>
+        <dt>{t("sub.plan")}</dt>
         <dd className={styles.amount}>
           {subscription.currency} {subscription.priceDecimal} <span className={styles.perInterval}>/ {intervalLabel}</span>
         </dd>
       </div>
       <div className={styles.line}>
-        <dt>Estado</dt>
-        <dd>{STATUS_LABEL[subscription.status]}</dd>
+        <dt>{t("sub.statusLabel")}</dt>
+        <dd>{t(`sub.status.${subscription.status}`)}</dd>
       </div>
       <div className={styles.line}>
-        <dt>Próxima renovación</dt>
-        <dd className={styles.mono}>{formatDate(subscription.nextBillingDate)}</dd>
+        <dt>{t("sub.nextRenewal")}</dt>
+        <dd className={styles.mono}>{date(subscription.nextBillingDate)}</dd>
       </div>
       {subscription.gracePeriodEndsAt && (
         <div className={styles.line}>
-          <dt>Fin del período de gracia</dt>
-          <dd className={styles.mono}>{formatDate(subscription.gracePeriodEndsAt)}</dd>
+          <dt>{t("sub.graceEnds")}</dt>
+          <dd className={styles.mono}>{date(subscription.gracePeriodEndsAt)}</dd>
         </div>
       )}
     </dl>

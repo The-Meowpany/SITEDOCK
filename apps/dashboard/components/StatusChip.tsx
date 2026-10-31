@@ -1,4 +1,7 @@
-import { statusLabel } from "@/lib/format";
+"use client";
+
+import { statusKey } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import styles from "./StatusChip.module.css";
 
 const TONE_CLASS: Record<string, string> = {
@@ -10,24 +13,27 @@ const TONE_CLASS: Record<string, string> = {
 
 /** Compact status indicator shared by tables across the console. */
 export function StatusChip({ status }: { status: string }) {
+  const { t } = useI18n();
   const tone = TONE_CLASS[status] ?? status.toLowerCase();
+  const key = statusKey(status);
   return (
     <span className={`${styles.chip} ${styles[tone] ?? ""}`}>
       <span className={styles.dot} aria-hidden />
-      {statusLabel(status)}
+      {key ? t(key) : status}
     </span>
   );
 }
 
 /** Numbered checklist shown when the workspace is brand new (empty state). */
 export function OnboardingChecklist() {
+  const { t } = useI18n();
   return (
     <ol className={styles.onboarding}>
-      <li>Creá un proyecto y un sitio desde la API (POST /websites)</li>
-      <li>Subí el ZIP de tu sitio y obtené la vista previa</li>
-      <li>Creá tu plan mensual (ej. Profesional US$29)</li>
-      <li>Generá el checkout y enviáselo a tu cliente</li>
-      <li>Cuando pague, el sitio pasa a LIVE y el MRR aparece acá</li>
+      <li>{t("onboarding.step1")}</li>
+      <li>{t("onboarding.step2")}</li>
+      <li>{t("onboarding.step3")}</li>
+      <li>{t("onboarding.step4")}</li>
+      <li>{t("onboarding.step5")}</li>
     </ol>
   );
 }

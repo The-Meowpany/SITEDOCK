@@ -37,10 +37,10 @@ export class RetryPolicy {
 }
 
 /**
- * Backoff exponencial acotado con jitter (Fase 19 §18): nunca retry inmediato
- * en loop, nunca crecimiento sin techo. RNG inyectable para tests
- * deterministas. Devuelve SIEMPRE >= 1ms para que un sleep(0) no genere
- * retry-storms.
+ * Bounded exponential backoff with jitter (Phase 19 §18): never an immediate retry
+ * in a loop, never unbounded growth. Injectable RNG for deterministic
+ * tests. ALWAYS returns >= 1ms so that a sleep(0) does not produce
+ * retry storms.
  */
 export function exponentialBackoffWithJitter(
   attemptNumber: number,

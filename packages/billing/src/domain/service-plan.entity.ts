@@ -6,7 +6,7 @@ export type BillingInterval = "MONTHLY" | "YEARLY";
  * Two product lines share the plan/subscription machinery:
  * - HOSTING: infrastructure for one website.
  * - MAINTENANCE: the recurring membership that covers modifications — the
- *   "tiers" (Básico/Pro/Premium) a freelancer offers. A website holds at most
+ *   "tiers" (Basic/Pro/Premium) a freelancer offers. A website holds at most
  *   one subscription of each kind.
  */
 export type PlanKind = "HOSTING" | "MAINTENANCE";

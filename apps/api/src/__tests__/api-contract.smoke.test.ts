@@ -101,7 +101,7 @@ describe("HTTP contract smoke (sin BD)", () => {
       headers: { "stripe-signature": "t=1,v1=deadbeef" },
       body: "{}",
     });
-    // Con PAYMENT_PROVIDER=mock activo, stripe es un provider desconocido.
+    // With PAYMENT_PROVIDER=mock active, stripe is an unknown provider.
     expect(res.status).toBe(400);
     const bodyText = await res.text();
     expect(bodyText).toMatch(/Unknown payment provider/i);

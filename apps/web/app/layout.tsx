@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SiteDock — Portal del cliente",
-  description: "Revisá el estado de tu sitio, tu suscripción y tus solicitudes.",
+  title: "SiteDock — Client portal",
+  description: "Check the status of your site, your subscription and your requests.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

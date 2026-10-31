@@ -33,7 +33,7 @@ describe("Dashboard Navigation and Website Listing", () => {
   it("renders sites list page with create form", async () => {
     render(<SitesPage />);
     await waitFor(() => {
-      expect(screen.getByText(/Crear sitio/i)).toBeInTheDocument();
+      expect(screen.getByText(/Create site/i)).toBeInTheDocument();
     });
   });
 

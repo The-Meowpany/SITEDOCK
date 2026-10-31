@@ -142,7 +142,7 @@ export class CustomDomain {
   /**
    * SSL can only be issued for a domain whose ownership has actually been
    * verified. The expiry comes from the certificate Caddy served — it is what
-   * the scheduled renewal job watches (brief §17 "SSL próximo a vencer").
+   * the scheduled renewal job watches (brief §17 "SSL about to expire").
    */
   issueSsl(sslExpiresAt?: Date): void {
     if (this.props.status !== "VERIFIED") {

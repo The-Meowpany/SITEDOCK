@@ -218,13 +218,13 @@ describe("Backup integrity (Fase 19 �14)", () => {
     const create = new CreateWebsiteBackupUseCase(deployments, backups, storage);
     const { backupId } = await create.execute({ websiteId: WEBSITE, sourceDeploymentId: DEP_V1, sourceStoragePath: DEP_SOURCE_PATH });
 
-    // Corrupci�n silenciosa: alguien modifica UN archivo dentro del backup.
+    // Silent corruption: someone modifies ONE file inside the backup.
     await storage.put(`websites/${WEBSITE}/backups/${backupId}/index.html`, Buffer.from("<html>HACKED</html>"));
 
     const restore = new RestoreWebsiteBackupUseCase(backups, deployments, storage);
     await expect(restore.execute({ websiteId: WEBSITE, backupId })).rejects.toThrow(/integrity check failed/i);
 
-    // Ning�n deployment corrupto fue creado.
+    // No corrupt deployment was created.
     expect(deployments.store.size).toBe(1);
   });
 

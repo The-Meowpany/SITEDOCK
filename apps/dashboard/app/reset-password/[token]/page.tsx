@@ -6,9 +6,11 @@ import { useState } from "react";
 import styles from "../../login/page.module.css";
 import { api } from "@/lib/api-client";
 import { ApiError } from "@/lib/api-error";
+import { useI18n } from "@/lib/i18n";
 
 export default function ResetPasswordPage() {
   const params = useParams<{ token: string }>();
+  const { t } = useI18n();
   const token = params.token;
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -21,11 +23,11 @@ export default function ResetPasswordPage() {
     setError(null);
 
     if (password.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres.");
+      setError(t("reset.error.short"));
       return;
     }
     if (password !== confirmation) {
-      setError("Las contraseñas no coinciden.");
+      setError(t("reset.error.mismatch"));
       return;
     }
 
@@ -36,8 +38,8 @@ export default function ResetPasswordPage() {
     } catch (err) {
       setError(
         err instanceof ApiError && err.code === "INVALID_RESET_TOKEN"
-          ? "El enlace es inválido o expiró. Solicita uno nuevo."
-          : "No pudimos restablecer la contraseña. Inténtalo de nuevo."
+          ? t("reset.error.invalidLink")
+          : t("reset.error.generic")
       );
     } finally {
       setSubmitting(false);
@@ -48,22 +50,22 @@ export default function ResetPasswordPage() {
     <main className={styles.page}>
       <div className={styles.card}>
         <p className={styles.eyebrow}>SiteDock</p>
-        <h1 className={styles.title}>Nueva contraseña</h1>
-        <p className={styles.subtitle}>Define la contraseña de tu cuenta.</p>
+        <h1 className={styles.title}>{t("reset.title")}</h1>
+        <p className={styles.subtitle}>{t("reset.subtitle")}</p>
 
         {done ? (
           <>
-            <p className={styles.success}>Contraseña actualizada. Ya puedes ingresar.</p>
+            <p className={styles.success}>{t("reset.done")}</p>
             <p className={styles.helper}>
               <Link className={styles.link} href="/login">
-                Ir al login
+                {t("reset.toLogin")}
               </Link>
             </p>
           </>
         ) : (
           <form className={styles.form} onSubmit={handleSubmit}>
             <label className={styles.field}>
-              <span>Nueva contraseña</span>
+              <span>{t("reset.title")}</span>
               <input
                 type="password"
                 value={password}
@@ -74,7 +76,7 @@ export default function ResetPasswordPage() {
               />
             </label>
             <label className={styles.field}>
-              <span>Confirmar contraseña</span>
+              <span>{t("reset.confirm")}</span>
               <input
                 type="password"
                 value={confirmation}
@@ -88,11 +90,11 @@ export default function ResetPasswordPage() {
             {error && <p className={styles.error}>{error}</p>}
 
             <button className={styles.submit} type="submit" disabled={submitting}>
-              {submitting ? "Guardando…" : "Guardar contraseña"}
+              {submitting ? t("reset.submitting") : t("reset.submit")}
             </button>
             <p className={styles.helper}>
               <Link className={styles.link} href="/forgot-password">
-                Solicitar otro enlace
+                {t("reset.requestAnother")}
               </Link>
             </p>
           </form>

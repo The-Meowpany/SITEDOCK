@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import styles from "../../page.module.css";
 import { api, ApiError } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 
 export default function AcceptInvitePage() {
   const params = useParams<{ token: string }>();
   const router = useRouter();
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,11 +31,11 @@ export default function AcceptInvitePage() {
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.code === "INVITATION_EMAIL_MISMATCH") {
-          setError("Esta invitación fue enviada a otro email. Iniciá sesión con la cuenta correcta.");
+          setError(tRef.current("invite.mismatch"));
         } else if (err instanceof ApiError && err.code === "INVITATION_EXPIRED") {
-          setError("Esta invitación ya venció. Pedile a tu desarrollador que te envíe una nueva.");
+          setError(tRef.current("invite.expired"));
         } else {
-          setError("No pudimos procesar la invitación.");
+          setError(tRef.current("invite.error"));
         }
       }
     }
@@ -44,7 +48,7 @@ export default function AcceptInvitePage() {
 
   return (
     <main className={styles.center}>
-      {error ? <p className={styles.error}>{error}</p> : <p className={styles.loading}>Aceptando invitación…</p>}
+      {error ? <p className={styles.error}>{error}</p> : <p className={styles.loading}>{t("invite.accepting")}</p>}
     </main>
   );
 }

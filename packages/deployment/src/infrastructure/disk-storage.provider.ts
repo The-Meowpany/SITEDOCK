@@ -38,7 +38,8 @@ export class DiskStorageProvider implements StorageProvider {
       throw new InfrastructureError(`Unsafe storage key: "${key}"`, "UNSAFE_STORAGE_KEY");
     }
     const full = resolve(this.root, key);
-    if (full !== this.root && !full.startsWith(this.root + sep)) {
+    if (full === this.root) return this.root;
+    if (!full.startsWith(this.root + sep)) {
       throw new InfrastructureError(`Unsafe storage key: "${key}"`, "UNSAFE_STORAGE_KEY");
     }
     return full;

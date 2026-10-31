@@ -1,5 +1,4 @@
 import { timingSafeEqual } from "node:crypto";
-import crypto from "node:crypto";
 import { Router } from "express";
 import { prisma } from "@sitedock/database";
 
@@ -27,42 +26,9 @@ tlsAskRouter.use((req, _res, next) => {
   next();
 });
 
-// CSRF protection: the on-demand TLS "ask" endpoint is reachable by the edge
-// (Caddy consults it on certificate renewals) and has no session. SameSite=Strict
-// cookies are sent only on same-site requests, so a cross-site (CSRF) GET cannot
-// obtain one. The shared secret remains the real gate: a cross-site request
-// cannot guess TLS_ASK_SECRET, and the endpoint never logs query strings.
-//
-// The nonce is bound to the current TLS request and the originating request so
-// the token can only be issued and consumed by the same inbound task. That
-// prevents an attacker from pre-generating a nonce for a different session and
-// replaying it here.
-tlsAskRouter.use((req, _res, next) => {
-  const cookie = req.cookies?.csrfTls;
-  const nonce = req.cookies?.csrfNonce as string | undefined;
-  const token = req.headers['x-csrf-tls'];
-  const origin = req.headers.origin;
-
-  const generatedSecret = (key: string) => {
-    const secret = crypto.randomBytes(32).toString('hex');
-    req.cookies = { ...req.cookies, [key]: secret };
-    return secret;
-  };
-
-  if (cookie === token || token === '' || (origin && origin === token)) {
-    if (!cookie) {
-      const secret = generatedSecret('csrfTls');
-      _res.cookie('csrfTls', secret, { sameSite: 'strict', httpOnly: true, maxAge: 86_400_000 });
-    }
-    if (!nonce) {
-      const nonceSecret = generatedSecret('csrfNonce');
-      _res.cookie('csrfNonce', nonceSecret, { sameSite: 'strict', httpOnly: true, maxAge: 86_400_000 });
-    }
-    next();
-    return;
-  }
-  _res.status(403).json({ code: 'FORBIDDEN', message: 'CSRF protection' });
-});
+// No CSRF middleware on purpose: this is a stateless, read-only GET consumed by
+// Caddy (no browser, no session cookie). It is gated by the shared
+// TLS_ASK_SECRET compared in constant time below.
 
 const BASE_DOMAIN = (process.env.SITEDOCK_BASE_DOMAIN ?? "sitedock.local")
   .toLowerCase()

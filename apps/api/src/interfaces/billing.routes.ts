@@ -317,14 +317,14 @@ paymentWebhookRouter.post("/:provider", async (req, res, next) => {
       throw new ApplicationError(`Unknown payment provider: ${provider}`, "UNKNOWN_PAYMENT_PROVIDER");
     }
 
-    // Cada provider firma con su propio header.
+    // Each provider signs with its own header.
     const signatureHeader =
       provider === "stripe" ? "stripe-signature" : "x-sitedock-signature";
     const signature = req.header(signatureHeader) ?? "";
     const rawBody: Buffer = req.body; // populated by express.raw() for this route only
 
-    // Fase 16 — Connect: account.updated sincroniza el estado del merchant
-    // (KYC/capabilities) ANTES del pipeline económico, que no lo consume.
+    // Phase 16 — Connect: account.updated syncs the merchant state
+    // (KYC/capabilities) BEFORE the economic pipeline, which does not consume it.
     if (provider === "stripe") {
       let envelopeType: string | undefined;
       let accountId: string | undefined;
@@ -336,7 +336,7 @@ paymentWebhookRouter.post("/:provider", async (req, res, next) => {
         envelopeType = probe.type;
         accountId = probe.data?.object?.id;
       } catch {
-        /* JSON inválido: verifyAndParseWebhook lo rechazará abajo */
+        /* Invalid JSON: verifyAndParseWebhook will reject it below */
       }
       if (envelopeType === "account.updated" && accountId) {
         await new SyncConnectedAccountStatusUseCase(connectedAccountsRepo, connectedAccountGateway!).execute({

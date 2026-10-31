@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import type {
@@ -14,7 +14,8 @@ import type {
   TenantRow,
 } from "@/lib/api-client";
 import { ApiError } from "@/lib/api-error";
-import { bytes, money, statusLabel } from "@/lib/format";
+import { bytes, money, statusKey } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import { MetricCard } from "@/components/MetricCard";
 import { AppHeader } from "@/components/AppHeader";
 import styles from "./page.module.css";
@@ -37,6 +38,10 @@ function EmptyRow({ colSpan, children }: { colSpan: number; children: React.Reac
 
 export default function AdminConsolePage() {
   const router = useRouter();
+  const { t, formatDate, formatDateTime } = useI18n();
+  // Always-current translator for async code, so a locale change never re-triggers data loading.
+  const tRef = useRef(t);
+  tRef.current = t;
   const [overview, setOverview] = useState<PlatformOverview | null>(null);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [users, setUsers] = useState<AdminUserRow[]>([]);
@@ -64,9 +69,9 @@ export default function AdminConsolePage() {
       api.listWebhookEvents(),
       api.getDnsStatus().catch(() => null),
     ])
-      .then(([o, t, u, w, p, e, d]) => {
+      .then(([o, tenantRows, u, w, p, e, d]) => {
         setOverview(o);
-        setTenants(t);
+        setTenants(tenantRows);
         setUsers(u);
         setWebsites(w);
         setPayments(p);
@@ -78,7 +83,7 @@ export default function AdminConsolePage() {
           router.replace("/login");
           return;
         }
-        setError(err instanceof Error ? err.message : "No pudimos cargar el panel.");
+        setError(err instanceof Error ? err.message : tRef.current("admin.loadError"));
       });
   }, [router]);
 
@@ -89,27 +94,27 @@ export default function AdminConsolePage() {
       else await api.suspendUser(user.id);
       await refreshUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "La acción falló.");
+      setError(err instanceof Error ? err.message : t("admin.actionFailed"));
     } finally {
       setBusyUserId(null);
     }
   }
 
   async function suspendSite(site: AdminWebsiteRow) {
-    if (!window.confirm(`¿Suspender "${site.name}" (${site.workspaceName})? Esta acción notifica al cliente.`)) return;
+    if (!window.confirm(t("admin.confirmSuspendSite", { site: site.name, workspace: site.workspaceName }))) return;
     setBusySiteId(site.id);
     try {
       await api.suspendWebsite(site.id);
       await refreshWebsites();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "La acción falló.");
+      setError(err instanceof Error ? err.message : t("admin.actionFailed"));
     } finally {
       setBusySiteId(null);
     }
   }
 
   async function provisionDns(apply: boolean) {
-    if (apply && !window.confirm("Crear los registros A @ y * en la zona base de DNSHE?")) return;
+    if (apply && !window.confirm(t("admin.confirmDns"))) return;
     setDnsBusy(apply ? "apply" : "dry-run");
     setError(null);
     try {
@@ -118,7 +123,7 @@ export default function AdminConsolePage() {
       setDnsResult(result);
       setDnsStatus(await api.getDnsStatus().catch(() => dnsStatus));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos provisionar DNS.");
+      setError(err instanceof Error ? err.message : t("admin.dnsProvisionError"));
     } finally {
       setDnsBusy(null);
     }
@@ -135,7 +140,7 @@ export default function AdminConsolePage() {
   if (!overview) {
     return (
       <main className={styles.page}>
-        <p className={styles.loading}>Abriendo el panel de plataforma…</p>
+        <p className={styles.loading}>{t("admin.opening")}</p>
       </main>
     );
   }
@@ -144,54 +149,54 @@ export default function AdminConsolePage() {
 
   return (
     <main className={styles.page}>
-      <AppHeader subtitle="Administración de plataforma" />
+      <AppHeader subtitle={t("admin.subtitle")} />
 
-      <nav className={styles.sectionNav} aria-label="Secciones">
-        <a href="#metricas">Métricas</a>
-        <a href="#tenants">Workspaces</a>
-        <a href="#usuarios">Usuarios</a>
-        <a href="#sitios">Sitios</a>
-        <a href="#dns">DNSHE</a>
-        <a href="#pagos">Pagos y webhooks</a>
+      <nav className={styles.sectionNav} aria-label={t("admin.nav.aria")}>
+        <a href="#metricas">{t("admin.nav.metrics")}</a>
+        <a href="#tenants">{t("admin.nav.tenants")}</a>
+        <a href="#usuarios">{t("admin.nav.users")}</a>
+        <a href="#sitios">{t("admin.nav.sites")}</a>
+        <a href="#dns">{t("admin.nav.dns")}</a>
+        <a href="#pagos">{t("admin.nav.payments")}</a>
       </nav>
 
       {error && <p className={styles.error}>{error}</p>}
 
-      <section id="metricas" className={styles.metrics} aria-label="Métricas de plataforma">
-        <MetricCard label="MRR plataforma" value={primary(overview.mrrByCurrency)} hint={`ARR ${primary(overview.arrByCurrency)}`} tone="good" />
-        <MetricCard label="Suscripciones activas" value={String(overview.activeSubscriptionCount)} />
-        <MetricCard label="Sitios LIVE" value={String(liveCount)} hint={`${Object.values(overview.websitesByStatus).reduce((a, b) => a + b, 0)} sitios en total`} />
-        <MetricCard label="Pagos fallidos (30d)" value={String(overview.failedPaymentsLast30Days)} tone={overview.failedPaymentsLast30Days > 0 ? "bad" : "neutral"} />
-        <MetricCard label="Deployments" value={String(overview.deploymentsTotal)} hint={bytes(overview.storageBytes)} />
+      <section id="metricas" className={styles.metrics} aria-label={t("admin.metrics.aria")}>
+        <MetricCard label={t("admin.mrr")} value={primary(overview.mrrByCurrency)} hint={`ARR ${primary(overview.arrByCurrency)}`} tone="good" />
+        <MetricCard label={t("admin.activeSubs")} value={String(overview.activeSubscriptionCount)} />
+        <MetricCard label={t("admin.liveSites")} value={String(liveCount)} hint={t("admin.totalSites", { count: Object.values(overview.websitesByStatus).reduce((a, b) => a + b, 0) })} />
+        <MetricCard label={t("admin.failed30")} value={String(overview.failedPaymentsLast30Days)} tone={overview.failedPaymentsLast30Days > 0 ? "bad" : "neutral"} />
+        <MetricCard label={t("admin.deployments")} value={String(overview.deploymentsTotal)} hint={bytes(overview.storageBytes)} />
       </section>
 
-      <section id="tenants" className={styles.panel} aria-label="Tenants">
-        <h2 className={styles.panelTitle}>Workspaces (tenants)</h2>
+      <section id="tenants" className={styles.panel} aria-label={t("admin.tenants.aria")}>
+        <h2 className={styles.panelTitle}>{t("admin.tenants.title")}</h2>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th scope="col">Nombre</th>
-              <th scope="col">Slug</th>
+              <th scope="col">{t("admin.col.name")}</th>
+              <th scope="col">{t("admin.col.slug")}</th>
               <th scope="col" className={styles.num}>
-                Sitios
+                {t("admin.col.sites")}
               </th>
               <th scope="col" className={styles.num}>
-                Subs activas
+                {t("admin.col.activeSubs")}
               </th>
-              <th scope="col">Creado</th>
+              <th scope="col">{t("admin.col.created")}</th>
             </tr>
           </thead>
           <tbody>
             {tenants.length === 0 ? (
-              <EmptyRow colSpan={5}>Sin workspaces todavía.</EmptyRow>
+              <EmptyRow colSpan={5}>{t("admin.tenants.empty")}</EmptyRow>
             ) : (
-              tenants.map((t) => (
-                <tr key={t.id}>
-                  <td>{t.name}</td>
-                  <td className={styles.dim}>{t.slug}</td>
-                  <td className={styles.num}>{t.websiteCount}</td>
-                  <td className={styles.num}>{t.activeSubscriptionCount}</td>
-                  <td className={styles.dim}>{new Date(t.createdAt).toLocaleDateString("es")}</td>
+              tenants.map((tenant) => (
+                <tr key={tenant.id}>
+                  <td>{tenant.name}</td>
+                  <td className={styles.dim}>{tenant.slug}</td>
+                  <td className={styles.num}>{tenant.websiteCount}</td>
+                  <td className={styles.num}>{tenant.activeSubscriptionCount}</td>
+                  <td className={styles.dim}>{formatDate(tenant.createdAt)}</td>
                 </tr>
               ))
             )}
@@ -199,35 +204,35 @@ export default function AdminConsolePage() {
         </table>
       </section>
 
-      <section id="usuarios" className={styles.panel} aria-label="Usuarios">
-        <h2 className={styles.panelTitle}>Usuarios</h2>
+      <section id="usuarios" className={styles.panel} aria-label={t("admin.users.aria")}>
+        <h2 className={styles.panelTitle}>{t("admin.users.aria")}</h2>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th scope="col">Nombre</th>
-              <th scope="col">Email</th>
-              <th scope="col">Rol</th>
-              <th scope="col">Estado</th>
-              <th scope="col" aria-label="Acciones" />
+              <th scope="col">{t("admin.col.name")}</th>
+              <th scope="col">{t("admin.col.email")}</th>
+              <th scope="col">{t("admin.col.role")}</th>
+              <th scope="col">{t("admin.col.status")}</th>
+              <th scope="col" aria-label={t("admin.col.actions")} />
             </tr>
           </thead>
           <tbody>
             {users.length === 0 ? (
-              <EmptyRow colSpan={5}>Sin usuarios registrados.</EmptyRow>
+              <EmptyRow colSpan={5}>{t("admin.users.empty")}</EmptyRow>
             ) : (
               users.map((u) => (
                 <tr key={u.id} className={u.suspendedAt ? styles.rowSuspended : ""}>
                   <td>{u.fullName}</td>
                   <td className={styles.dim}>{u.email}</td>
                   <td>{u.platformRole}</td>
-                  <td>{u.suspendedAt ? "Suspendido" : "Activo"}</td>
+                  <td>{u.suspendedAt ? t("admin.user.suspended") : t("admin.user.active")}</td>
                   <td className={styles.num}>
                     <button
                       className={u.suspendedAt ? styles.btnGood : styles.btnDanger}
                       disabled={busyUserId === u.id}
                       onClick={() => toggleSuspend(u)}
                     >
-                      {busyUserId === u.id ? "…" : u.suspendedAt ? "Reactivar" : "Suspender"}
+                      {busyUserId === u.id ? "…" : u.suspendedAt ? t("admin.user.reinstate") : t("admin.user.suspend")}
                     </button>
                   </td>
                 </tr>
@@ -237,20 +242,20 @@ export default function AdminConsolePage() {
         </table>
       </section>
 
-      <section id="sitios" className={styles.panel} aria-label="Sitios">
-        <h2 className={styles.panelTitle}>Sitios recientes</h2>
+      <section id="sitios" className={styles.panel} aria-label={t("admin.sites.aria")}>
+        <h2 className={styles.panelTitle}>{t("admin.sites.title")}</h2>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th scope="col">Sitio</th>
-              <th scope="col">Workspace</th>
-              <th scope="col">Estado</th>
-              <th scope="col" aria-label="Acciones" />
+              <th scope="col">{t("admin.col.site")}</th>
+              <th scope="col">{t("admin.col.workspace")}</th>
+              <th scope="col">{t("admin.col.status")}</th>
+              <th scope="col" aria-label={t("admin.col.actions")} />
             </tr>
           </thead>
           <tbody>
             {websites.length === 0 ? (
-              <EmptyRow colSpan={4}>Sin sitios creados todavía.</EmptyRow>
+              <EmptyRow colSpan={4}>{t("admin.sites.empty")}</EmptyRow>
             ) : (
               websites.map((w) => (
                 <tr key={w.id}>
@@ -259,11 +264,11 @@ export default function AdminConsolePage() {
                     <span className={styles.dim}> · {w.subdomain}</span>
                   </td>
                   <td className={styles.dim}>{w.workspaceName}</td>
-                  <td>{statusLabel(w.status)}</td>
+                  <td>{statusKey(w.status) ? t(statusKey(w.status)!) : w.status}</td>
                   <td className={styles.num}>
                     {w.status !== "SUSPENDED" && w.status !== "DELETED" && (
                       <button className={styles.btnDanger} disabled={busySiteId === w.id} onClick={() => suspendSite(w)}>
-                        {busySiteId === w.id ? "…" : "Suspender"}
+                        {busySiteId === w.id ? "…" : t("admin.user.suspend")}
                       </button>
                     )}
                   </td>
@@ -274,15 +279,15 @@ export default function AdminConsolePage() {
         </table>
       </section>
 
-      <section id="dns" className={styles.panel} aria-label="DNSHE">
-        <h2 className={styles.panelTitle}>DNSHE / dominio base</h2>
+      <section id="dns" className={styles.panel} aria-label={t("admin.dns.aria")}>
+        <h2 className={styles.panelTitle}>{t("admin.dns.title")}</h2>
         {!dnsStatus ? (
-          <p className={styles.dim}>No pudimos consultar el estado de DNSHE.</p>
+          <p className={styles.dim}>{t("admin.dns.unavailable")}</p>
         ) : !dnsStatus.configured ? (
           <>
             <p className={styles.down}>{dnsStatus.message}</p>
             <p className={styles.dim}>
-              Configurá DNSHE_API_KEY, DNSHE_API_SECRET, SITEDOCK_BASE_DOMAIN y SITEDOCK_PUBLIC_IP para gestionar la zona.
+              {t("admin.dns.configureHint")}
             </p>
           </>
         ) : (
@@ -290,25 +295,25 @@ export default function AdminConsolePage() {
             <table className={styles.table}>
               <tbody>
                 <tr>
-                  <th scope="row">Dominio base</th>
+                  <th scope="row">{t("admin.dns.baseDomain")}</th>
                   <td className={styles.money}>{dnsStatus.baseDomain ?? "—"}</td>
-                  <th scope="row">Zona</th>
-                  <td>{dnsStatus.zoneFound ? dnsStatus.zone?.fullDomain : "No encontrada"}</td>
+                  <th scope="row">{t("admin.dns.zone")}</th>
+                  <td>{dnsStatus.zoneFound ? dnsStatus.zone?.fullDomain : t("admin.dns.notFound")}</td>
                 </tr>
                 <tr>
-                  <th scope="row">Estado de zona</th>
+                  <th scope="row">{t("admin.dns.zoneStatus")}</th>
                   <td>{dnsStatus.zone?.status ?? "—"}</td>
-                  <th scope="row">Vence</th>
+                  <th scope="row">{t("admin.dns.expires")}</th>
                   <td className={styles.dim}>
-                    {dnsStatus.zone?.expiresAt ? new Date(dnsStatus.zone.expiresAt).toLocaleDateString("es") : "—"}
+                    {dnsStatus.zone?.expiresAt ? formatDate(dnsStatus.zone.expiresAt) : "—"}
                   </td>
                 </tr>
                 <tr>
-                  <th scope="row">IP pública</th>
+                  <th scope="row">{t("admin.dns.publicIp")}</th>
                   <td className={dnsStatus.publicIpConfigured ? styles.up : styles.down}>
-                    {dnsStatus.publicIpConfigured ? "Configurada" : "Falta SITEDOCK_PUBLIC_IP"}
+                    {dnsStatus.publicIpConfigured ? t("admin.dns.configured") : t("admin.dns.missingIp")}
                   </td>
-                  <th scope="row">Registros</th>
+                  <th scope="row">{t("admin.dns.records")}</th>
                   <td>{dnsStatus.recordCount ?? 0}</td>
                 </tr>
               </tbody>
@@ -317,32 +322,32 @@ export default function AdminConsolePage() {
             <div className={styles.inlineForm}>
               <input
                 className={styles.input}
-                placeholder="IP pública (opcional si está en .env)"
+                placeholder={t("admin.dns.ipPlaceholder")}
                 value={dnsPublicIp}
                 onChange={(e) => setDnsPublicIp(e.target.value)}
-                aria-label="IP pública"
+                aria-label={t("admin.dns.publicIp")}
               />
               <button className={styles.btnGood} disabled={!!dnsBusy} onClick={() => provisionDns(false)}>
-                {dnsBusy === "dry-run" ? "Simulando…" : "Simular A @ y *"}
+                {dnsBusy === "dry-run" ? t("admin.dns.simulating") : t("admin.dns.simulate")}
               </button>
               <button className={styles.btnDanger} disabled={!!dnsBusy} onClick={() => provisionDns(true)}>
-                {dnsBusy === "apply" ? "Aplicando…" : "Aplicar A @ y *"}
+                {dnsBusy === "apply" ? t("admin.dns.applying") : t("admin.dns.apply")}
               </button>
             </div>
 
-            <h2 className={`${styles.panelTitle} ${styles.spaced}`}>Registros de la zona</h2>
+            <h2 className={`${styles.panelTitle} ${styles.spaced}`}>{t("admin.dns.zoneRecords")}</h2>
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th scope="col">Nombre</th>
-                  <th scope="col">Tipo</th>
-                  <th scope="col">Valor</th>
-                  <th scope="col">TTL</th>
+                  <th scope="col">{t("admin.col.name")}</th>
+                  <th scope="col">{t("admin.col.type")}</th>
+                  <th scope="col">{t("admin.col.value")}</th>
+                  <th scope="col">{t("admin.col.ttl")}</th>
                 </tr>
               </thead>
               <tbody>
                 {(dnsStatus.records ?? []).length === 0 ? (
-                  <EmptyRow colSpan={4}>La zona no tiene registros.</EmptyRow>
+                  <EmptyRow colSpan={4}>{t("admin.dns.noRecords")}</EmptyRow>
                 ) : (
                   (dnsStatus.records ?? []).map((record) => (
                     <tr key={`${record.type}-${record.name}-${record.value}`}>
@@ -359,15 +364,15 @@ export default function AdminConsolePage() {
             {dnsResult && (
               <>
                 <h2 className={`${styles.panelTitle} ${styles.spaced}`}>
-                  Resultado {dnsResult.applied ? "(aplicado)" : "(simulación)"}
+                  {dnsResult.applied ? t("admin.dns.resultApplied") : t("admin.dns.resultDryRun")}
                 </h2>
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th scope="col">Nombre</th>
-                      <th scope="col">Tipo</th>
-                      <th scope="col">Valor</th>
-                      <th scope="col">Acción</th>
+                      <th scope="col">{t("admin.col.name")}</th>
+                      <th scope="col">{t("admin.col.type")}</th>
+                      <th scope="col">{t("admin.col.value")}</th>
+                      <th scope="col">{t("admin.col.action")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -389,53 +394,53 @@ export default function AdminConsolePage() {
         )}
       </section>
 
-      <section id="pagos" className={styles.panel} aria-label="Pagos y webhooks">
-        <h2 className={styles.panelTitle}>Pagos recientes</h2>
+      <section id="pagos" className={styles.panel} aria-label={t("admin.payments.aria")}>
+        <h2 className={styles.panelTitle}>{t("admin.payments.title")}</h2>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th scope="col">Monto</th>
-              <th scope="col">Estado</th>
-              <th scope="col">Provider</th>
-              <th scope="col">Fecha</th>
+              <th scope="col">{t("admin.col.amount")}</th>
+              <th scope="col">{t("admin.col.status")}</th>
+              <th scope="col">{t("admin.col.provider")}</th>
+              <th scope="col">{t("admin.col.date")}</th>
             </tr>
           </thead>
           <tbody>
             {payments.length === 0 ? (
-              <EmptyRow colSpan={4}>Sin pagos procesados todavía.</EmptyRow>
+              <EmptyRow colSpan={4}>{t("admin.payments.empty")}</EmptyRow>
             ) : (
               payments.map((p) => (
                 <tr key={p.id}>
                   <td className={styles.money}>{money(p.amountCents, p.currency)}</td>
                   <td className={p.status === "FAILED" ? styles.down : p.status === "SUCCEEDED" ? styles.up : ""}>{p.status}</td>
                   <td className={styles.dim}>{p.provider}</td>
-                  <td className={styles.dim}>{new Date(p.createdAt).toLocaleString("es")}</td>
+                  <td className={styles.dim}>{formatDateTime(p.createdAt)}</td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
 
-        <h2 className={`${styles.panelTitle} ${styles.spaced}`}>Eventos de webhook (ledger idempotente)</h2>
+        <h2 className={`${styles.panelTitle} ${styles.spaced}`}>{t("admin.webhooks.title")}</h2>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th scope="col">Tipo</th>
-              <th scope="col">Provider</th>
-              <th scope="col">Procesamiento</th>
-              <th scope="col">Recibido</th>
+              <th scope="col">{t("admin.col.type")}</th>
+              <th scope="col">{t("admin.col.provider")}</th>
+              <th scope="col">{t("admin.col.processing")}</th>
+              <th scope="col">{t("admin.col.received")}</th>
             </tr>
           </thead>
           <tbody>
             {events.length === 0 ? (
-              <EmptyRow colSpan={4}>Sin eventos de webhook recibidos.</EmptyRow>
+              <EmptyRow colSpan={4}>{t("admin.webhooks.empty")}</EmptyRow>
             ) : (
               events.map((e) => (
                 <tr key={e.id}>
                   <td className={styles.money}>{e.eventType}</td>
                   <td className={styles.dim}>{e.provider}</td>
                   <td>{e.processingStatus}</td>
-                  <td className={styles.dim}>{new Date(e.receivedAt).toLocaleString("es")}</td>
+                  <td className={styles.dim}>{formatDateTime(e.receivedAt)}</td>
                 </tr>
               ))
             )}
@@ -443,7 +448,7 @@ export default function AdminConsolePage() {
         </table>
       </section>
 
-      <footer className={styles.footer}>Cada acción de este panel queda registrada en el audit log.</footer>
+      <footer className={styles.footer}>{t("admin.footer")}</footer>
     </main>
   );
 }

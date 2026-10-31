@@ -50,14 +50,14 @@ describe("Dashboard Deployment Status and Rollback", () => {
   it("displays deployment status", async () => {
     render(<WebsiteDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText(/site1.example.com/i)).toBeInTheDocument();
+      expect(screen.getByText(/site1\.example\.com/i)).toBeInTheDocument();
     });
   });
 
   it("provides rollback functionality", async () => {
     render(<WebsiteDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText(/site1.example.com/i)).toBeInTheDocument();
+      expect(screen.getByText(/site1\.example\.com/i)).toBeInTheDocument();
     });
     // Rollback controls should be present
   });

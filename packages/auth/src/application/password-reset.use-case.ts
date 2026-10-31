@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { ApplicationError, EmailAddress } from "@sitedock/shared";
-import { PasswordHasher, PasswordResetRepository, UserRepository } from "../domain/ports";
+import { PasswordHasher, PasswordResetRepository, SessionAdminRepository, UserRepository } from "../domain/ports";
 import { hashToken } from "./login-user.use-case";
 
 const RESET_TTL_MS = 1000 * 60 * 30; // 30 minutes
@@ -41,7 +41,9 @@ export class ConfirmPasswordResetUseCase {
   constructor(
     private readonly users: UserRepository,
     private readonly resets: PasswordResetRepository,
-    private readonly hasher: PasswordHasher
+    private readonly hasher: PasswordHasher,
+    /** When provided, a successful reset also ends every existing session of the user. */
+    private readonly sessions?: SessionAdminRepository
   ) {}
 
   async execute(rawToken: string, newPassword: string): Promise<void> {
@@ -62,5 +64,7 @@ export class ConfirmPasswordResetUseCase {
     user.changePasswordHash(await this.hasher.hash(newPassword));
     await this.users.save(user);
     await this.resets.markUsed(hashToken(rawToken));
+    // Whoever held the old password (or a stolen session) must not stay logged in after a reset.
+    await this.sessions?.revokeAllByUserId(user.id);
   }
 }

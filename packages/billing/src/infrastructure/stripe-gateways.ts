@@ -8,8 +8,8 @@ import {
 import { StripeHttpClient } from "./stripe-http.client";
 
 /**
- * Gateways REALES de Fase 16 sobre la API REST de Stripe. Toda llamada vive
- * aquí — el dominio solo ve los puertos, y los tests inyectan fakes.
+ * REAL Phase 16 gateways over the Stripe REST API. Every call lives
+ * here — the domain only sees the ports, and tests inject fakes.
  */
 
 interface StripeAccountResponse {
@@ -93,9 +93,9 @@ export class StripeReconciliationSource implements ReconciliationSource {
   constructor(private readonly http: StripeHttpClient) {}
 
   /**
-   * Lista balance transactions tipo "charge" desde `createdSince`, con expand
-   * del source para poder mapearlas al payment_intent que nuestro ledger usa
-   * como referencia externa. Paginación simple por has_more (MVP).
+   * Lists "charge" balance transactions since `createdSince`, with the source
+   * expanded so they can be mapped to the payment_intent our ledger uses
+   * as its external reference. Simple has_more pagination (MVP).
    */
   async listBalanceTransactions(createdSince: Date): Promise<BalanceTransactionEntry[]> {
     const entries: BalanceTransactionEntry[] = [];

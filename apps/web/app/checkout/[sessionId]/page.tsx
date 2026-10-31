@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import styles from "./page.module.css";
+import { useI18n } from "@/lib/i18n";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -20,6 +21,9 @@ interface CheckoutInfo {
 export default function DemoCheckoutPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId;
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const [info, setInfo] = useState<CheckoutInfo | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "paying" | "paid" | "error">("loading");
@@ -29,7 +33,7 @@ export default function DemoCheckoutPage() {
     let cancelled = false;
     fetch(`${API_BASE}/api/v1/public/demo-checkout/${sessionId}`, { credentials: "include" })
       .then(async (res) => {
-        if (!res.ok) throw new Error("Este enlace de pago no existe o expiró.");
+        if (!res.ok) throw new Error(tRef.current("checkout.notFound"));
         return res.json();
       })
       .then((data: CheckoutInfo) => {
@@ -40,7 +44,7 @@ export default function DemoCheckoutPage() {
       .catch((err) => {
         if (!cancelled) {
           setState("error");
-          setError(err instanceof Error ? err.message : "No pudimos abrir el checkout.");
+          setError(err instanceof Error ? err.message : tRef.current("checkout.openError"));
         }
       });
     return () => {
@@ -56,31 +60,31 @@ export default function DemoCheckoutPage() {
         method: "POST",
         credentials: "include",
       });
-      if (!res.ok) throw new Error("El pago no pudo procesarse.");
+      if (!res.ok) throw new Error(t("checkout.payError"));
       setState("paid");
     } catch (err) {
       setState("ready");
-      setError(err instanceof Error ? err.message : "El pago no pudo procesarse.");
+      setError(err instanceof Error ? err.message : t("checkout.payError"));
     }
   }
 
   return (
     <main className={styles.page}>
       <div className={styles.card} data-state={state}>
-        <p className={styles.eyebrow}>SiteDock · Pago seguro</p>
+        <p className={styles.eyebrow}>{t("checkout.eyebrow")}</p>
 
-        {state === "loading" && <p className={styles.loading}>Abriendo tu checkout…</p>}
+        {state === "loading" && <p className={styles.loading}>{t("checkout.opening")}</p>}
 
         {state === "error" && (
           <>
-            <h1 className={styles.title}>Enlace no válido</h1>
+            <h1 className={styles.title}>{t("checkout.invalid")}</h1>
             <p className={styles.body}>{error}</p>
           </>
         )}
 
         {info && state !== "error" && (
           <>
-            <h1 className={styles.title}>{state === "paid" ? "¡Pago recibido!" : info.description}</h1>
+            <h1 className={styles.title}>{state === "paid" ? t("checkout.received") : info.description}</h1>
             <p className={styles.amount}>
               {info.currency === "USD" ? "$" : `${info.currency} `}
               {info.amountDecimal}
@@ -88,19 +92,18 @@ export default function DemoCheckoutPage() {
 
             {state === "paid" ? (
               <p className={styles.success}>
-                Gracias. Tu pago fue procesado y todo quedó activo — tu desarrollador ya lo ve de su lado.
+                {t("checkout.success")}
               </p>
             ) : (
               <>
                 <p className={styles.body}>
-                  Estás por pagar la membresía de tu sitio. Sin sorpresas: es el importe acordado con tu
-                  desarrollador.
+                  {t("checkout.body")}
                 </p>
                 <button className={styles.payButton} onClick={pay} disabled={state === "paying"}>
-                  {state === "paying" ? "Procesando…" : `Pagar ${info.currency === "USD" ? "$" : ""}${info.amountDecimal}`}
+                  {state === "paying" ? t("checkout.processing") : t("checkout.pay", { amount: `${info.currency === "USD" ? "$" : ""}${info.amountDecimal}` })}
                 </button>
                 {error && <p className={styles.error}>{error}</p>}
-                <p className={styles.demoNote}>Modo demo — ningún cargo real se procesa.</p>
+                <p className={styles.demoNote}>{t("checkout.demoNote")}</p>
               </>
             )}
           </>

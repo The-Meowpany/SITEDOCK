@@ -55,6 +55,22 @@ export class User {
     this.props.updatedAt = new Date();
   }
 
+  rename(fullName: string): void {
+    const trimmed = fullName.trim();
+    if (trimmed.length < 2) {
+      throw new DomainError("Full name must have at least 2 characters", "INVALID_FULL_NAME");
+    }
+    this.props.fullName = trimmed;
+    this.props.updatedAt = new Date();
+  }
+
+  /** A new address is unverified until the owner proves control of it. */
+  changeEmail(email: EmailAddress): void {
+    this.props.email = email;
+    this.props.emailVerifiedAt = null;
+    this.props.updatedAt = new Date();
+  }
+
   isSuspended(): boolean {
     return this.props.suspendedAt !== null;
   }

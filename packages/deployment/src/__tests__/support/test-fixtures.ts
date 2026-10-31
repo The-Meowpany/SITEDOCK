@@ -19,6 +19,9 @@ import { prisma } from "@sitedock/database";
 /** Workspace slugs owned exclusively by the integration suites in this package. */
 export const FIXTURE_WORKSPACE_SLUG_PREFIXES = ["mapping-test-ws-", "concurrency-test-ws-"];
 
+/** Fixtures younger than this are assumed to belong to a live test run. */
+export const STALE_FIXTURE_MIN_AGE_MS = 10 * 60 * 1000;
+
 type OwnedFixtures = {
   workspaceIds?: Array<string | undefined>;
   projectIds?: Array<string | undefined>;
@@ -100,9 +103,16 @@ export async function deleteOwnFixtures(
  *
  * Returns the number of stale workspaces removed.
  */
-export async function purgeStaleFixtureWorkspaces(): Promise<number> {
+export async function purgeStaleFixtureWorkspaces(
+  minAgeMs: number = STALE_FIXTURE_MIN_AGE_MS
+): Promise<number> {
+  // Only workspaces older than `minAgeMs` are considered stale. A fixture
+  // created moments ago belongs to a suite that is running right now (possibly
+  // in another worker) and must never be deleted from under it.
+  const cutoff = new Date(Date.now() - minAgeMs);
   const stale = await prisma.workspace.findMany({
     where: {
+      createdAt: { lt: cutoff },
       OR: FIXTURE_WORKSPACE_SLUG_PREFIXES.map((prefix) => ({ slug: { startsWith: prefix } })),
     },
     select: { id: true },

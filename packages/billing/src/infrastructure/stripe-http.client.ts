@@ -1,21 +1,21 @@
 import { withProviderMetrics } from "@sitedock/shared";
 
 /**
- * Cliente HTTP mínimo para la API REST de Stripe (ADR-006).
+ * Minimal HTTP client for the Stripe REST API (ADR-006).
  *
- * Decisión consciente: NO dependemos del SDK oficial todavía. La superficie
- * que Fase 16 usa es chica (accounts, account_links, checkout sessions,
- * refunds, balance_transactions) y un wrapper tipado sobre fetch:
- * - se testea offline con `fetchImpl` inyectado;
- * - evita una dependencia pesada hasta que el volumen de endpoints lo justifique.
- * Si la superficie crece, se reemplaza por el SDK sin tocar puertos ni dominio.
+ * Conscious decision: we do NOT depend on the official SDK yet. The surface
+ * that Phase 16 uses is small (accounts, account_links, checkout sessions,
+ * refunds, balance_transactions) and a typed wrapper over fetch:
+ * - is tested offline with an injected `fetchImpl`;
+ * - avoids a heavy dependency until the endpoint volume justifies it.
+ * If the surface grows, it is replaced by the SDK without touching ports or domain.
  *
- * Fase 19 (hardening):
- * - `Idempotency-Key` soportado en POST — garantiza UN efecto económico por clave
- *   aunque la respuesta se pierda y el cliente reintente.
- * - 429 → StripeRateLimitError con retryAfterMs del header Retry-After
- *   (los callers NUNCA deben reintentar inmediatamente).
- * - Métricas por operación (outcome + latencia) vía @sitedock/shared.
+ * Phase 19 (hardening):
+ * - `Idempotency-Key` supported on POST — guarantees ONE economic effect per key
+ *   even if the response is lost and the client retries.
+ * - 429 → StripeRateLimitError with retryAfterMs from the Retry-After header
+ *   (callers must NEVER retry immediately).
+ * - Per-operation metrics (outcome + latency) via @sitedock/shared.
  */
 
 export type StripeHttpMethod = "GET" | "POST";
@@ -31,7 +31,7 @@ export class StripeApiError extends Error {
   }
 }
 
-/** 429 con Retry-After — los callers deben esperar; nunca retry inmediato. */
+/** 429 with Retry-After — callers must wait; never retry immediately. */
 export class StripeRateLimitError extends Error {
   constructor(public readonly retryAfterMs: number | null) {
     super("Stripe rate limit exceeded");
@@ -42,7 +42,7 @@ export class StripeRateLimitError extends Error {
 export interface StripeHttpClientOptions {
   secretKey: string;
   apiBase?: string; // default: https://api.stripe.com — override para tests/sandbox proxies
-  fetchImpl?: typeof fetch; // inyectable para tests offline
+  fetchImpl?: typeof fetch; // injectable for offline tests
 }
 
 export interface StripePostOptions {
@@ -50,7 +50,7 @@ export interface StripePostOptions {
   headers?: Record<string, string>;
 }
 
-/** Aplana objetos anidados a notación de corchetes de Stripe: price_data[currency]=usd */
+/** Flattens nested objects to Stripe's bracket notation: price_data[currency]=usd */
 export function flattenStripeParams(
   params: Record<string, unknown>,
   prefix = ""

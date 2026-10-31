@@ -21,6 +21,20 @@ export function renderEmail(event: NotificationEvent): RenderedEmail {
         body: `Hi ${event.fullName}, your SiteDock account is ready. Let's turn your next website into recurring revenue.`,
       };
 
+    case "security_notice": {
+      const what = {
+        password_changed: "Your SiteDock password was changed.",
+        email_changed: "The email address on your SiteDock account was changed.",
+        account_deleted: "Your SiteDock account was deleted.",
+        sessions_revoked: "All other sessions on your SiteDock account were signed out.",
+      }[event.change];
+      return {
+        to: event.recipientEmail,
+        subject: "Security notice for your SiteDock account",
+        body: `${what} If you did not do this, reset your password immediately and contact support.`,
+      };
+    }
+
     case "password_reset":
       return {
         to: event.recipientEmail,

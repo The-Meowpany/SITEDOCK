@@ -25,3 +25,27 @@ export interface PasswordResetRepository {
   findValidByTokenHash(tokenHash: string): Promise<{ userId: UserId } | null>;
   markUsed(tokenHash: string): Promise<void>;
 }
+
+export interface SessionSummary {
+  id: string;
+  tokenHash: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: Date;
+  expiresAt: Date;
+}
+
+/** Session management beyond login/logout. Kept separate so existing fakes of SessionRepository stay valid. */
+export interface SessionAdminRepository {
+  listActiveByUserId(userId: UserId, now: Date): Promise<SessionSummary[]>;
+  /** Revokes every session of the user, optionally keeping one (the caller's). Returns how many were revoked. */
+  revokeAllByUserId(userId: UserId, exceptTokenHash?: string): Promise<number>;
+  /** Revokes a session only if it belongs to `userId` (never revoke someone else's by guessing an id). */
+  revokeByIdForUser(userId: UserId, sessionId: string): Promise<boolean>;
+}
+
+export interface AccountDeletionRepository {
+  /** Workspaces where `userId` is the ONLY owner: deleting the user would orphan them. */
+  findSoleOwnerWorkspaceIds(userId: UserId): Promise<string[]>;
+  deleteUser(userId: UserId): Promise<void>;
+}

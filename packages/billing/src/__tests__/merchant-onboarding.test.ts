@@ -80,8 +80,8 @@ describe("Merchant onboarding (Stripe Connect Express)", () => {
   });
 });
 
-// El diff de reconciliación vive aquí también para mantener los casos de
-// dinero real agrupados (los tests puros están en reconciliation.test.ts).
+// The reconciliation diff also lives here to keep the real-money cases
+// grouped together (the pure tests are in reconciliation.test.ts).
 describe("reconcilePayments — sanity adicional", () => {
   it("múltiples balance txns del mismo pago son excepción explícita", () => {
     const exceptions = reconcilePayments([], [
@@ -92,7 +92,7 @@ describe("reconcilePayments — sanity adicional", () => {
   });
 });
 
-// re-export para que tree-shaking no elimine el import del comparador en este archivo
+// re-export so tree-shaking does not drop the comparator import in this file
 void reconcilePayments;
 
 

@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/lib/i18n";
 
 export default function GitHubCallbackPage() {
   const router = useRouter();
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -14,7 +18,7 @@ export default function GitHubCallbackPage() {
     const [workspaceId, websiteId] = state.split(":");
 
     if (!installationId || !workspaceId || !websiteId) {
-      setError("GitHub no devolvió una instalación válida. Volvé a intentar desde el sitio.");
+      setError(tRef.current("githubCallback.error"));
       return;
     }
 
@@ -25,7 +29,7 @@ export default function GitHubCallbackPage() {
 
   return (
     <main style={{ padding: 32, fontFamily: "monospace" }}>
-      {error ?? "Conectando la instalación de GitHub…"}
+      {error ?? t("githubCallback.connecting")}
     </main>
   );
 }

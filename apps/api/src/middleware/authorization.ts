@@ -1,8 +1,7 @@
 import { ForbiddenError, NotFoundError } from "@sitedock/shared";
 import { hasPermission, ROLE_PERMISSIONS, type Permission } from "@sitedock/shared";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@sitedock/database";
 
-const prisma = new PrismaClient();
 
 export interface AuthorizationContext {
   userId: string;

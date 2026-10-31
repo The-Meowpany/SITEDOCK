@@ -32,7 +32,7 @@ describe("reconcilePayments (Stripe ↔ ledger, Fase 16 §4)", () => {
   it("detecta divergencia de monto y jamás la corrige en silencio", () => {
     const exceptions = reconcilePayments([ledger("pi_bad", 2900)], [stripeEntry("pi_bad", 100)]);
     expect(exceptions[0]).toMatchObject({ kind: "AMOUNT_MISMATCH", externalPaymentId: "pi_bad" });
-    // El ledger NO se muta para "arreglarla".
+    // The ledger is NOT mutated to "fix" it.
     expect(ledger("pi_bad").amountCents).toBe(2900);
   });
 

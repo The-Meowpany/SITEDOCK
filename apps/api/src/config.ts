@@ -2,10 +2,10 @@
  * Typed configuration. Business logic never reads process.env directly.
  */
 
-/** Fase 19 §7/§8 — validación centralizada: en producción una configuración
- * de provider PEDIDA pero incompleta es un fallo de arranque, nunca un
- * fallback silencioso a mocks. Pura e inyectable → testeable. Devuelve la
- * lista de errores (vacía = OK).
+/** Phase 19 §7/§8 — centralized validation: in production a REQUESTED provider
+ * configuration that is incomplete is a startup failure, never a
+ * silent fallback to mocks. Pure and injectable → testable. Returns the
+ * list of errors (empty = OK).
  */
 export function validateProductionConfig(
   env: NodeJS.ProcessEnv,

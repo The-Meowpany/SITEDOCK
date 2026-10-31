@@ -51,6 +51,7 @@ export class PrismaUserRepository implements UserRepository {
         suspendedAt: user.suspendedAt,
       },
       update: {
+        email: user.email.value,
         passwordHash: user.passwordHash,
         fullName: user.fullName,
         emailVerifiedAt: user.emailVerifiedAt,

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import styles from "./AppHeader.module.css";
 import { api } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 
 interface AppHeaderProps {
   /** Subtitle shown next to the brand, e.g. the workspace name. */
@@ -13,6 +15,7 @@ interface AppHeaderProps {
 /** Shared console header: brand mark, context subtitle and session controls. */
 export function AppHeader({ subtitle }: AppHeaderProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [email, setEmail] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
 
@@ -39,14 +42,18 @@ export function AppHeader({ subtitle }: AppHeaderProps) {
           S
         </span>
         <div>
-          <p className={styles.eyebrow}>SiteDock · Consola</p>
+          <p className={styles.eyebrow}>{t("header.eyebrow")}</p>
           <p className={styles.subtitle}>{subtitle}</p>
         </div>
       </div>
       <div className={styles.session}>
-        {email && <span className={styles.email}>{email}</span>}
+        {email && (
+          <Link href="/account" className={styles.email}>
+            {email}
+          </Link>
+        )}
         <button className={styles.logout} onClick={handleLogout} disabled={leaving}>
-          {leaving ? "Saliendo…" : "Cerrar sesión"}
+          {leaving ? t("header.leaving") : t("header.logout")}
         </button>
       </div>
     </header>

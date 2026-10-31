@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useState } from "react";
 import styles from "../login/page.module.css";
 import { api } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 
 export default function ForgotPasswordPage() {
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +21,7 @@ export default function ForgotPasswordPage() {
       await api.requestPasswordReset(email);
       setSent(true);
     } catch {
-      setError("No pudimos enviar el enlace. Inténtalo de nuevo.");
+      setError(t("forgot.error"));
     } finally {
       setSubmitting(false);
     }
@@ -29,26 +31,26 @@ export default function ForgotPasswordPage() {
     <main className={styles.page}>
       <div className={styles.card}>
         <p className={styles.eyebrow}>SiteDock</p>
-        <h1 className={styles.title}>Recuperar acceso</h1>
+        <h1 className={styles.title}>{t("forgot.title")}</h1>
         <p className={styles.subtitle}>
-          Te enviaremos un enlace para restablecer tu contraseña.
+          {t("forgot.intro")}
         </p>
 
         {sent ? (
           <>
             <p className={styles.success}>
-              Si el email existe, enviamos un enlace de recuperación. Revisa tu bandeja.
+              {t("forgot.sent")}
             </p>
             <p className={styles.helper}>
               <Link className={styles.link} href="/login">
-                Volver al login
+                {t("auth.backToLogin")}
               </Link>
             </p>
           </>
         ) : (
           <form className={styles.form} onSubmit={handleSubmit}>
             <label className={styles.field}>
-              <span>Email</span>
+              <span>{t("auth.email")}</span>
               <input
                 type="email"
                 value={email}
@@ -61,11 +63,11 @@ export default function ForgotPasswordPage() {
             {error && <p className={styles.error}>{error}</p>}
 
             <button className={styles.submit} type="submit" disabled={submitting}>
-              {submitting ? "Enviando…" : "Enviar enlace"}
+              {submitting ? t("forgot.submitting") : t("forgot.submit")}
             </button>
             <p className={styles.helper}>
               <Link className={styles.link} href="/login">
-                Volver al login
+                {t("auth.backToLogin")}
               </Link>
             </p>
           </form>

@@ -1,10 +1,10 @@
 import { defineConfig } from "vitest/config";
 
 /**
- * Smoke tests de contrato HTTP: levantan createApp() en un puerto efímero y
- * ejercitan middleware/seguridad/errores por rutas que NO requieren base de
- * datos. DATABASE_URL es un placeholder válido — PrismaClient se instancia
- * lazy y nunca conecta en estas pruebas.
+ * HTTP contract smoke tests: they start createApp() on an ephemeral port and
+ * exercise middleware/security/errors through routes that do NOT require a
+ * database. DATABASE_URL is a valid placeholder — PrismaClient is instantiated
+ * lazily and never connects in these tests.
  */
 export default defineConfig({
   test: {

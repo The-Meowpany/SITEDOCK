@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import styles from "./page.module.css";
 import { LedgerCard, LedgerSection, Perforation } from "@/components/LedgerCard";
@@ -8,6 +8,7 @@ import { StatusStamp } from "@/components/StatusStamp";
 import { SubscriptionReceipt } from "@/components/SubscriptionReceipt";
 import { MaintenancePanel } from "@/components/MaintenancePanel";
 import { api, ApiError, type MaintenanceRequestSummary, type SubscriptionDetail, type WebsiteDetail } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 import { siteHostname } from "@/lib/site-domain";
 
 interface PortalData {
@@ -21,6 +22,9 @@ interface PortalData {
 export default function PortalPage() {
   const params = useParams<{ workspaceId: string; websiteId: string }>();
   const router = useRouter();
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [data, setData] = useState<PortalData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +60,7 @@ export default function PortalPage() {
           router.replace("/login");
           return;
         }
-        setError("No pudimos cargar la información de tu sitio.");
+        setError(tRef.current("portal.loadError"));
       }
     }
 
@@ -77,7 +81,7 @@ export default function PortalPage() {
   if (!data) {
     return (
       <main className={styles.center}>
-        <p className={styles.loading}>Cargando…</p>
+        <p className={styles.loading}>{t("home.loading")}</p>
       </main>
     );
   }
@@ -92,11 +96,11 @@ export default function PortalPage() {
   return (
     <main className={styles.page}>
       <button className={styles.logout} onClick={handleLogout}>
-        Salir
+        {t("portal.logout")}
       </button>
       <div className={styles.wrap}>
         <LedgerCard>
-          <LedgerSection eyebrow="SiteDock · Ficha de servicio">
+          <LedgerSection eyebrow={t("portal.serviceCard")}>
             <h1 className={styles.siteName}>{website.name}</h1>
             <p className={styles.subdomain}>{siteHostname(website.subdomain)}</p>
             <div className={styles.stampSlot}>
@@ -106,14 +110,14 @@ export default function PortalPage() {
 
           <Perforation />
 
-          <LedgerSection eyebrow="Suscripción">
+          <LedgerSection eyebrow={t("portal.subscription")}>
             <SubscriptionReceipt subscription={subscription} />
             {tier && (
               <div className={styles.tierNote}>
                 <strong>{tier.planName}</strong>
                 {tier.quotaIncluded === null
-                  ? " · cambios ilimitados"
-                  : ` · te quedan ${tier.remaining} de ${tier.quotaIncluded} este período`}
+                  ? t("portal.unlimitedChanges")
+                  : t("portal.remaining", { remaining: tier.remaining ?? 0, quota: tier.quotaIncluded })}
               </div>
             )}
             {charges.length > 0 && (
@@ -122,7 +126,7 @@ export default function PortalPage() {
                   <li key={c.id}>
                     <span>{c.title}</span>
                     <span className={`${styles.chargeStatus} ${c.status === "PAID" ? styles.paid : ""}`}>
-                      {c.status === "PAID" ? "Pagado" : c.status === "PENDING" ? "Pendiente" : "Cancelado"} ·{" "}
+                      {t(`charge.${c.status}`)} ·{" "}
                       {c.currency === "USD" ? "$" : ""}
                       {c.amountDecimal}
                     </span>
@@ -134,7 +138,7 @@ export default function PortalPage() {
 
           <Perforation />
 
-          <LedgerSection eyebrow="Solicitudes">
+          <LedgerSection eyebrow={t("portal.requests")}>
             <MaintenancePanel workspaceId={params.workspaceId} websiteId={params.websiteId} initialRequests={requests} />
           </LedgerSection>
         </LedgerCard>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import type {
@@ -20,39 +20,52 @@ import type {
 } from "@/lib/api-client";
 import { ApiError } from "@/lib/api-error";
 import { money, moneyFromDecimal } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
+import type { MessageKey, TranslateParams } from "@/lib/i18n";
 import { siteHostname } from "@/lib/site-domain";
 import { StatusChip } from "@/components/StatusChip";
 import { Field, btnGhost, btnPrimary, formRow, inputClass, selectClass } from "@/components/ui";
 import styles from "./page.module.css";
 
-const REQ_STATUS: Record<MaintenanceRequestSummary["status"], string> = {
-  OPEN: "Recibida",
-  IN_PROGRESS: "En progreso",
-  WAITING_CLIENT: "Esperando cliente",
-  PENDING_PAYMENT: "Pendiente de pago",
-  PAID: "Pagada",
-  COMPLETED: "Completada",
-  APPROVED: "Aprobada",
-  CANCELED: "Cancelada",
+const REQ_STATUS_KEY: Record<MaintenanceRequestSummary["status"], MessageKey> = {
+  OPEN: "req.status.OPEN",
+  IN_PROGRESS: "req.status.IN_PROGRESS",
+  WAITING_CLIENT: "req.status.WAITING_CLIENT",
+  PENDING_PAYMENT: "req.status.PENDING_PAYMENT",
+  PAID: "req.status.PAID",
+  COMPLETED: "req.status.COMPLETED",
+  APPROVED: "req.status.APPROVED",
+  CANCELED: "req.status.CANCELED",
 };
 
-const DOMAIN_STATUS: Record<DomainDetail["status"], string> = {
-  PENDING: "Pendiente",
-  VERIFYING: "Verificando",
-  VERIFIED: "Verificado",
-  FAILED: "Falló",
+const DOMAIN_STATUS_KEY: Record<DomainDetail["status"], MessageKey> = {
+  PENDING: "domain.status.PENDING",
+  VERIFYING: "domain.status.VERIFYING",
+  VERIFIED: "domain.status.VERIFIED",
+  FAILED: "domain.status.FAILED",
 };
 
-const SSL_STATUS: Record<DomainDetail["sslStatus"], string> = {
-  NONE: "Sin certificado",
-  PENDING: "Emitiendo",
-  ISSUED: "Activo",
-  FAILED: "Error",
+const SSL_STATUS_KEY: Record<DomainDetail["sslStatus"], MessageKey> = {
+  NONE: "ssl.status.NONE",
+  PENDING: "ssl.status.PENDING",
+  ISSUED: "ssl.status.ISSUED",
+  FAILED: "ssl.status.FAILED",
+};
+
+const CHARGE_STATUS_KEY: Record<ChargeSummary["status"], MessageKey> = {
+  PAID: "charge.status.PAID",
+  PENDING: "charge.status.PENDING",
+  CANCELED: "charge.status.CANCELED",
 };
 
 export default function SiteConsolePage() {
   const params = useParams<{ workspaceId: string; websiteId: string }>();
   const router = useRouter();
+  const { t, formatDate, formatDateTime } = useI18n();
+  // Always-current translator for async code and effects, so a locale change never re-triggers data loading.
+  const tRef = useRef(t);
+  tRef.current = t;
+  const tt = (key: MessageKey, params?: TranslateParams) => tRef.current(key, params);
   const workspaceId = params.workspaceId;
   const websiteId = params.websiteId;
 
@@ -142,7 +155,7 @@ export default function SiteConsolePage() {
   async function loadGitHubRepos(installationId = githubInstallationId) {
     const id = installationId.trim();
     if (!/^\d{1,20}$/.test(id)) {
-      setError("Pegá el installation ID numérico que devolvió GitHub.");
+      setError(tt("site.github.invalidInstallation"));
       return;
     }
     setBusy("github-repos");
@@ -154,7 +167,7 @@ export default function SiteConsolePage() {
         result.repositories.some((repo) => repo.id === current) ? current : result.repositories[0]?.id ?? ""
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos listar los repositorios.");
+      setError(err instanceof Error ? err.message : tt("site.github.listError"));
     } finally {
       setBusy(null);
     }
@@ -181,7 +194,7 @@ export default function SiteConsolePage() {
           router.replace(`/login?returnTo=/workspaces/${workspaceId}/sitios/${websiteId}`);
           return;
         }
-        setError(err instanceof Error ? err.message : "No pudimos cargar el sitio.");
+        setError(err instanceof Error ? err.message : tt("site.loadError"));
       });
     return () => {
       cancelled = true;
@@ -195,7 +208,7 @@ export default function SiteConsolePage() {
       try {
         await fn(...args);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "La acción falló.");
+        setError(err instanceof Error ? err.message : tt("site.actionFailed"));
       } finally {
         setBusy(null);
       }
@@ -216,21 +229,21 @@ export default function SiteConsolePage() {
     setTimeout(() => setCopiedKey(null), 1800);
   }
 
-  // ── Deploy & versiones ───────────────────────────────────
+  // ── Deploy & versions ───────────────────────────────────
   const uploadZip = guard(async (file: File) => {
     await api.uploadDeployment(workspaceId, websiteId, file);
     setDeployments(await api.listDeployments(workspaceId, websiteId));
     setSite(await api.getWebsite(workspaceId, websiteId));
   }, "upload");
 
-  /** Publica encadenando submit→approve→publish con tolerancia a transiciones ya hechas. */
+  /** Publishes by chaining submit→approve→publish, tolerating already-completed transitions. */
   async function fullPublish(deploymentId: string) {
     for (const step of [
       () => api.submitForApproval(workspaceId, websiteId),
       () => api.approveWebsite(workspaceId, websiteId),
       () => api.publishDeployment(workspaceId, websiteId, deploymentId),
     ]) {
-      await step().catch(() => undefined); // transiciones ya aplicadas no son errores aquí
+      await step().catch(() => undefined); // transitions already applied are not errors here
     }
     await api.publishDeployment(workspaceId, websiteId, deploymentId);
     setDeployments(await api.listDeployments(workspaceId, websiteId));
@@ -246,17 +259,17 @@ export default function SiteConsolePage() {
     setSite(await api.getWebsite(workspaceId, websiteId));
   }, `rollback-${"x"}`);
 
-  // ── Cliente ──────────────────────────────────────────────
+  // ── Client ───────────────────────────────────────────────
   const attachClient = guard(async () => {
     let id = clientId;
     if (clientMode === "new") {
       if (!newClientName.trim() || !newClientEmail.trim()) {
-        throw new Error("Nombre y email del cliente son obligatorios.");
+        throw new Error(tt("site.client.required"));
       }
       const created = await api.createClient(workspaceId, newClientName.trim(), newClientEmail.trim());
       id = created.clientId;
     }
-    if (!id) throw new Error("Elegí un cliente.");
+    if (!id) throw new Error(tt("site.client.pick"));
     await api.assignClientToWebsite(workspaceId, websiteId, id);
     setClients(await api.listClients(workspaceId));
     setSite(await api.getWebsite(workspaceId, websiteId));
@@ -264,11 +277,11 @@ export default function SiteConsolePage() {
     setNewClientEmail("");
   }, "attach-client");
 
-  /** Invita al cliente asignado al portal (demo: devuelve el link para copiar). */
+  /** Invites the assigned client to the portal (demo: returns the link to copy). */
   const inviteAssignedClient = guard(async () => {
     const assigned = clients.find((c) => c.id === site?.clientId) ?? clients.find((c) => c.id === clientId);
     const email = assigned?.email ?? newClientEmail.trim();
-    if (!email) throw new Error("Asigná un cliente con email primero.");
+    if (!email) throw new Error(tt("site.client.needEmail"));
     const result = await api.inviteClientToPortal(workspaceId, email);
     if (result.inviteUrl) {
       const absolute = result.inviteUrl.startsWith("http")
@@ -276,14 +289,14 @@ export default function SiteConsolePage() {
         : `${window.location.origin.replace(/:\d+$/, ":3000")}${result.inviteUrl}`;
       await copyText(`invite-${email}`, absolute);
     } else {
-      setError(`Invitación enviada a ${email}.`);
+      setError(tt("site.client.inviteSent", { email }));
     }
   }, "invite-client");
 
-  // ── Suscripciones ────────────────────────────────────────
+  // ── Subscriptions ────────────────────────────────────────
   const subscribePlan = guard(async (kind: "HOSTING" | "MAINTENANCE") => {
     const planId = kind === "HOSTING" ? hostingPlanId : tierPlanId;
-    if (!planId) throw new Error("Elegí un plan primero.");
+    if (!planId) throw new Error(tt("site.sub.pickPlan"));
     // Use the id returned by creation — component state is still stale here.
     const created = await api.createSubscription(workspaceId, websiteId, planId);
     const checkout = await api.createCheckoutLink(workspaceId, websiteId, created.subscriptionId);
@@ -294,7 +307,7 @@ export default function SiteConsolePage() {
 
   function generateCheckoutFor(kind: "HOSTING" | "MAINTENANCE") {
     const sub = kind === "HOSTING" ? hostingSub : tierSub;
-    if (!sub) throw new Error("Primero creá la suscripción.");
+    if (!sub) throw new Error(tt("site.sub.createFirst"));
     return api.createCheckoutLink(workspaceId, websiteId, sub.id).then((r) => r.checkoutUrl);
   }
 
@@ -303,9 +316,9 @@ export default function SiteConsolePage() {
     await copyText(`checkout-${kind}`, url);
   }, `checkout-${"x"}`);
 
-  // ── Cobros únicos ────────────────────────────────────────
+  // ── One-time charges ────────────────────────────────────────
   const createOneTimeCharge = guard(async () => {
-    if (!chargeTitle.trim() || !chargePrice.trim()) throw new Error("Título y monto son obligatorios.");
+    if (!chargeTitle.trim() || !chargePrice.trim()) throw new Error(tt("site.charge.required"));
     const result = await api.createCharge(workspaceId, websiteId, chargeTitle.trim(), chargePrice.trim());
     setCharges(await api.listCharges(workspaceId, websiteId));
     setChargeTitle("");
@@ -318,13 +331,13 @@ export default function SiteConsolePage() {
     setCharges(await api.listCharges(workspaceId, websiteId));
   }, `cancel-charge-${"x"}`);
 
-  // ── Mantenimiento (acciones staff) ───────────────────────
+  // ── Maintenance (staff actions) ──────────────────────────
   async function requestAction(action: "quote" | "start" | "complete" | "approve" | "mark-paid", requestId: string) {
     setBusy(`req-${requestId}`);
     setError(null);
     try {
       if (action === "quote") {
-        const priceDecimal = window.prompt("Monto a cotizar (ej: 50.00)", "50.00");
+        const priceDecimal = window.prompt(tt("site.quote.prompt"), "50.00");
         if (!priceDecimal) return;
         await api.quoteRequest(workspaceId, websiteId, requestId, priceDecimal);
       } else if (action === "start") await api.startRequest(workspaceId, websiteId, requestId);
@@ -333,20 +346,20 @@ export default function SiteConsolePage() {
       else if (action === "mark-paid") await api.markPaidRequest(workspaceId, websiteId, requestId);
       setRequests(await api.listMaintenanceRequests(workspaceId, websiteId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "La acción falló.");
+      setError(err instanceof Error ? err.message : tt("site.actionFailed"));
     } finally {
       setBusy(null);
     }
   }
 
-  // ── Dominios ─────────────────────────────────────────────
+  // ── Domains ──────────────────────────────────────────────
   async function reloadDomains() {
     setDomainData(await api.listDomains(workspaceId, websiteId));
   }
 
   const connectDomain = guard(async () => {
     const hostname = domainHostname.trim();
-    if (!hostname) throw new Error("Escribí el dominio que querés conectar.");
+    if (!hostname) throw new Error(tt("site.domain.hostnameRequired"));
     await api.registerDomain(workspaceId, websiteId, hostname, {
       serviceId: domainServiceId || null,
       autoManage: domainAutoManage,
@@ -361,10 +374,10 @@ export default function SiteConsolePage() {
     const result = await api.verifyDomain(workspaceId, websiteId, domainId);
     await reloadDomains();
     if (!result.verified) {
-      throw new Error(result.message ?? "El registro de propiedad todavía no es visible en DNS.");
+      throw new Error(result.message ?? tt("site.domain.txtNotVisible"));
     }
     if (result.sslStatus === "FAILED") {
-      throw new Error(result.message ?? "El dominio está verificado, pero el certificado aún no está disponible.");
+      throw new Error(result.message ?? tt("site.domain.sslNotAvailableVerified"));
     }
   }, "domain-verify");
 
@@ -372,12 +385,12 @@ export default function SiteConsolePage() {
     const result = await api.checkDomain(workspaceId, websiteId, domainId);
     await reloadDomains();
     if (result.sslStatus === "FAILED") {
-      throw new Error(result.message ?? "El certificado todavía no está disponible.");
+      throw new Error(result.message ?? tt("site.domain.sslNotAvailable"));
     }
   }, "domain-check");
 
   const removeDomainById = guard(async (domainId: string, hostname: string) => {
-    if (!window.confirm(`¿Desconectar ${hostname} de este sitio?`)) return;
+    if (!window.confirm(tt("site.domain.confirmDisconnect", { name: hostname }))) return;
     await api.deleteDomain(workspaceId, websiteId, domainId);
     await reloadDomains();
   }, "domain-delete");
@@ -385,7 +398,7 @@ export default function SiteConsolePage() {
   // ── GitHub ───────────────────────────────────────────────
   const connectGitHubRepo = guard(async () => {
     const repo = githubRepos.find((candidate) => candidate.id === githubRepoId);
-    if (!repo) throw new Error("Elegí un repositorio de la instalación.");
+    if (!repo) throw new Error(tt("site.github.pickRepo"));
     await api.connectGitHub(workspaceId, websiteId, {
       installationId: githubInstallationId.trim(),
       repositoryId: repo.id,
@@ -400,7 +413,7 @@ export default function SiteConsolePage() {
   }, "github-connect");
 
   const disconnectGitHubRepo = guard(async (connectionId: string, repositoryFullName: string) => {
-    if (!window.confirm(`¿Desconectar ${repositoryFullName}?`)) return;
+    if (!window.confirm(tt("site.github.confirmDisconnect", { name: repositoryFullName }))) return;
     await api.disconnectGitHub(workspaceId, websiteId, connectionId);
     setGithubConnections(await api.listGitHubConnections(workspaceId, websiteId));
   }, "github-disconnect");
@@ -409,7 +422,7 @@ export default function SiteConsolePage() {
     return <main className={styles.page}><p className={styles.error}>{error}</p></main>;
   }
   if (!site) {
-    return <main className={styles.page}><p className={styles.loading}>Abriendo el sitio…</p></main>;
+    return <main className={styles.page}><p className={styles.loading}>{t("site.opening")}</p></main>;
   }
 
   const plansByKind = (kind: PlanDetail["kind"]) => plans.filter((p) => p.kind === kind && p.active);
@@ -429,9 +442,9 @@ export default function SiteConsolePage() {
         {sub ? (
           <>
             <dl className={styles.kv}>
-              <div><dt>Estado</dt><dd>{sub.status}</dd></div>
-              <div><dt>Precio</dt><dd className={styles.mono}>{sub.priceDecimal} {sub.currency}/{sub.billingInterval === "MONTHLY" ? "mes" : "año"}</dd></div>
-              <div><dt>Próxima renovación</dt><dd>{sub.nextBillingDate ? new Date(sub.nextBillingDate).toLocaleDateString("es") : "—"}</dd></div>
+              <div><dt>{t("sub.status")}</dt><dd>{sub.status}</dd></div>
+              <div><dt>{t("sub.price")}</dt><dd className={styles.mono}>{sub.priceDecimal} {sub.currency}/{sub.billingInterval === "MONTHLY" ? t("sub.perMonth") : t("sub.perYear")}</dd></div>
+              <div><dt>{t("sub.nextRenewal")}</dt><dd>{sub.nextBillingDate ? formatDate(sub.nextBillingDate) : "—"}</dd></div>
             </dl>
             {sub.status !== "ACTIVE" && sub.status !== "CANCELED" && sub.status !== "EXPIRED" && (
               <button
@@ -439,25 +452,25 @@ export default function SiteConsolePage() {
                 disabled={busy === `checkout-${kind}`}
                 onClick={() => copyCheckout(kind)}
               >
-                {copiedKey === `checkout-${kind}` ? "¡Link copiado!" : busy === `checkout-${kind}` ? "Generando…" : "Generar y copiar link de pago"}
+                {copiedKey === `checkout-${kind}` ? t("sub.linkCopied") : busy === `checkout-${kind}` ? t("sub.generating") : t("sub.generateLink")}
               </button>
             )}
           </>
         ) : (
           <div className={formRow}>
-            <Field label="Plan">
+            <Field label={t("sub.plan")}>
               <select className={selectClass} value={planId} onChange={(e) => setPlanId(e.target.value)}>
-                <option value="">Elegí un plan…</option>
+                <option value="">{t("sub.pickPlan")}</option>
                 {planOptions.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} — {p.priceDecimal} {p.currency}/{p.billingInterval === "MONTHLY" ? "mes" : "año"}
-                    {p.kind === "MAINTENANCE" ? (p.includedRequestQuota === null ? " · ilimitado" : ` · ${p.includedRequestQuota} cambios/mes`) : ""}
+                    {p.name} — {p.priceDecimal} {p.currency}/{p.billingInterval === "MONTHLY" ? t("sub.perMonth") : t("sub.perYear")}
+                    {p.kind === "MAINTENANCE" ? ` · ${p.includedRequestQuota === null ? t("sub.unlimited") : t("sub.changesPerMonth", { count: p.includedRequestQuota })}` : ""}
                   </option>
                 ))}
               </select>
             </Field>
             <button className={btnPrimary} disabled={busy === `subscribe-${kind}`} onClick={() => subscribePlan(kind)}>
-              {busy === `subscribe-${kind}` ? "…" : "Suscribir + copiar link"}
+              {busy === `subscribe-${kind}` ? "…" : t("sub.subscribe")}
             </button>
           </div>
         )}
@@ -470,7 +483,7 @@ export default function SiteConsolePage() {
     <>
       <header className={styles.header}>
         <div className={styles.headerLeft}>
-          <Link href={`/workspaces/${workspaceId}/sitios`} className={styles.back}>← Sitios</Link>
+          <Link href={`/workspaces/${workspaceId}/sitios`} className={styles.back}>{t("site.back")}</Link>
           <h1 className={styles.title}>{site.name}</h1>
           <StatusChip status={site.status} />
         </div>
@@ -480,9 +493,9 @@ export default function SiteConsolePage() {
       {error && <p className={styles.error}>{error}</p>}
 
       <div className={styles.grid}>
-        {/* ── Deploy & versiones ── */}
-        <section className={`${styles.panel} ${styles.span2}`} aria-label="Deploy">
-          <h2 className={styles.panelTitle}>Deploy &amp; versiones</h2>
+        {/* ── Deploy & versions ── */}
+        <section className={`${styles.panel} ${styles.span2}`} aria-label={t("deploy.aria")}>
+          <h2 className={styles.panelTitle}>{t("deploy.title")}</h2>
 
           <div
             className={styles.dropzone}
@@ -505,39 +518,39 @@ export default function SiteConsolePage() {
               }}
             />
             <label htmlFor="zip-input" className={styles.dropLabel}>
-              {busy === "upload" ? "Subiendo…" : "Arrastrá tu ZIP acá o hacé click para elegirlo"}
+              {busy === "upload" ? t("deploy.uploading") : t("deploy.drop")}
             </label>
           </div>
 
           <table className={styles.table}>
             <thead>
               <tr>
-                <th scope="col">Versión</th>
-                <th scope="col">Estado</th>
-                <th scope="col">Creado</th>
-                <th scope="col" aria-label="Acciones" />
+                <th scope="col">{t("deploy.version")}</th>
+                <th scope="col">{t("deploy.status")}</th>
+                <th scope="col">{t("deploy.created")}</th>
+                <th scope="col" aria-label={t("deploy.actions")} />
               </tr>
             </thead>
             <tbody>
               {deployments.length === 0 && (
-                <tr><td colSpan={4} className={styles.emptyCell}>Sin deployments todavía — subí tu primer ZIP arriba.</td></tr>
+                <tr><td colSpan={4} className={styles.emptyCell}>{t("deploy.empty")}</td></tr>
               )}
               {deployments.map((d) => {
                 const isProduction = site.productionDeploymentId === d.id;
                 return (
                   <tr key={d.id}>
-                    <td className={styles.mono}>v{d.version}{isProduction && <span className={styles.prodTag}>producción</span>}</td>
+                    <td className={styles.mono}>v{d.version}{isProduction && <span className={styles.prodTag}>{t("deploy.production")}</span>}</td>
                     <td>{d.status}</td>
-                    <td className={styles.dim}>{new Date(d.createdAt).toLocaleString("es")}</td>
+                    <td className={styles.dim}>{formatDateTime(d.createdAt)}</td>
                     <td className={styles.actions}>
                       {(d.status === "READY" || d.status === "PUBLISHED") && !isProduction && (
-                        <button className={btnGhost} disabled={!!busy} onClick={() => doRollback(d.id)} title="Restaurar esta versión como producción">
-                          Rollback aquí
+                        <button className={btnGhost} disabled={!!busy} onClick={() => doRollback(d.id)} title={t("deploy.rollbackTitle")}>
+                          {t("deploy.rollback")}
                         </button>
                       )}
                       {(d.status === "READY" || d.status === "QUEUED" || d.status === "BUILDING") && (
                         <button className={btnPrimary} disabled={!!busy} onClick={() => doPublish(d.id)}>
-                          {busy?.startsWith("publish") ? "…" : d.status === "READY" ? "Publicar" : "Forzar publicación"}
+                          {busy?.startsWith("publish") ? "…" : d.status === "READY" ? t("deploy.publish") : t("deploy.forcePublish")}
                         </button>
                       )}
                     </td>
@@ -548,21 +561,21 @@ export default function SiteConsolePage() {
           </table>
         </section>
 
-        {/* ── Cliente ── */}
-        <section className={styles.panel} aria-label="Cliente">
-          <h2 className={styles.panelTitle}>Cliente</h2>
+        {/* ── Client ── */}
+        <section className={styles.panel} aria-label={t("client.title")}>
+          <h2 className={styles.panelTitle}>{t("client.title")}</h2>
           {site.clientId ? (
             (() => {
               const assigned = clients.find((c) => c.id === site.clientId);
               return (
                 <div className={styles.kvBlock}>
-                  <strong>{assigned?.fullName ?? "Cliente asignado"}</strong>
+                  <strong>{assigned?.fullName ?? t("client.assigned")}</strong>
                   <span className={styles.dim}>{assigned?.email}</span>
                   {copiedKey?.startsWith("invite-") ? (
-                    <span className={styles.inviteCopied}>¡Link de invitación copiado!</span>
+                    <span className={styles.inviteCopied}>{t("client.inviteCopied")}</span>
                   ) : (
                     <button className={btnGhost} disabled={busy === "invite-client"} onClick={() => inviteAssignedClient()}>
-                      Invitar al portal
+                      {t("client.invite")}
                     </button>
                   )}
                 </div>
@@ -571,22 +584,22 @@ export default function SiteConsolePage() {
           ) : (
             <>
               <div className={formRow}>
-                <select className={selectClass} value={clientMode} onChange={(e) => setClientMode(e.target.value as "pick" | "new")} aria-label="Modo de cliente">
-                  <option value="new">Nuevo cliente…</option>
-                  {clients.length > 0 && <option value="pick">Existente</option>}
+                <select className={selectClass} value={clientMode} onChange={(e) => setClientMode(e.target.value as "pick" | "new")} aria-label={t("client.modeAria")}>
+                  <option value="new">{t("client.new")}</option>
+                  {clients.length > 0 && <option value="pick">{t("client.existing")}</option>}
                 </select>
               </div>
               {clientMode === "new" ? (
-                <Field label="Datos del cliente">
+                <Field label={t("client.details")}>
                   <div className={styles.stack}>
-                    <input className={inputClass} placeholder="Nombre completo" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} />
-                    <input className={inputClass} placeholder="email@cliente.com" type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} />
+                    <input className={inputClass} placeholder={t("client.fullName")} value={newClientName} onChange={(e) => setNewClientName(e.target.value)} />
+                    <input className={inputClass} placeholder={t("client.emailPlaceholder")} type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} />
                   </div>
                 </Field>
               ) : (
-                <Field label="Elegir cliente">
+                <Field label={t("client.choose")}>
                   <select className={selectClass} value={clientId} onChange={(e) => setClientId(e.target.value)}>
-                    <option value="">Elegí…</option>
+                    <option value="">{t("client.choosePlaceholder")}</option>
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>{c.fullName} ({c.email})</option>
                     ))}
@@ -594,41 +607,40 @@ export default function SiteConsolePage() {
                 </Field>
               )}
               <button className={btnPrimary} disabled={busy === "attach-client"} onClick={() => attachClient()}>
-                {busy === "attach-client" ? "Asignando…" : "Asignar al sitio"}
+                {busy === "attach-client" ? t("client.assigning") : t("client.assign")}
               </button>
             </>
           )}
         </section>
 
-        {/* ── Dominios ── */}
-        <section className={`${styles.panel} ${styles.span2}`} aria-label="Dominios">
+        {/* ── Domains ── */}
+        <section className={`${styles.panel} ${styles.span2}`} aria-label={t("domains.title")}>
           <div className={styles.domainTitleRow}>
-            <h2 className={styles.panelTitle}>Dominios</h2>
+            <h2 className={styles.panelTitle}>{t("domains.title")}</h2>
             <span className={styles.domainProvider}>
               {domainData.provider === "dnshe" ? "DNSHE" : domainData.provider} ·{" "}
-              {domainData.managed ? "DNS gestionado" : "DNS manual"}
+              {domainData.managed ? t("domains.managedDns") : t("domains.manualDns")}
             </span>
           </div>
           <p className={styles.dim}>
-            Conectá un dominio propio. Primero publicás un TXT de propiedad; después apuntás el
-            tráfico al edge y SiteDock emite el certificado automáticamente.
+            {t("domains.intro")}
           </p>
 
           <div className={styles.domainForm}>
             <input
               className={inputClass}
-              placeholder="midominio.com"
+              placeholder={t("domains.hostnamePlaceholder")}
               value={domainHostname}
               onChange={(e) => setDomainHostname(e.target.value)}
-              aria-label="Dominio a conectar"
+              aria-label={t("domains.hostnameAria")}
             />
             <select
               className={selectClass}
               value={domainServiceId}
               onChange={(e) => setDomainServiceId(e.target.value)}
-              aria-label="Servicio destino"
+              aria-label={t("domains.targetAria")}
             >
-              <option value="">Sitio estático (por defecto)</option>
+              <option value="">{t("domains.staticDefault")}</option>
               {services.map((service) => (
                 <option key={service.id} value={service.id}>
                   {service.name} · {service.hostname} ({service.status})
@@ -636,7 +648,7 @@ export default function SiteConsolePage() {
               ))}
             </select>
             <button className={btnPrimary} disabled={busy === "domain-connect"} onClick={() => connectDomain()}>
-              {busy === "domain-connect" ? "Conectando…" : "Conectar dominio"}
+              {busy === "domain-connect" ? t("domains.connecting") : t("domains.connect")}
             </button>
           </div>
           {domainData.managed && (
@@ -646,12 +658,12 @@ export default function SiteConsolePage() {
                 checked={domainAutoManage}
                 onChange={(e) => setDomainAutoManage(e.target.checked)}
               />
-              Crear el registro TXT automáticamente si el dominio está en la cuenta DNSHE
+              {t("domains.autoTxt")}
             </label>
           )}
 
           {domainData.domains.length === 0 ? (
-            <p className={styles.empty}>Todavía no hay dominios conectados.</p>
+            <p className={styles.empty}>{t("domains.empty")}</p>
           ) : (
             <ul className={styles.domainList}>
               {domainData.domains.map((domain) => {
@@ -663,10 +675,10 @@ export default function SiteConsolePage() {
                     <div className={styles.domainHead}>
                       <strong className={styles.mono}>{domain.hostname}</strong>
                       <span className={`${styles.badge} ${domain.status === "VERIFIED" ? styles.domainOk : ""}`}>
-                        {DOMAIN_STATUS[domain.status]}
+                        {t(DOMAIN_STATUS_KEY[domain.status])}
                       </span>
                       <span className={styles.dim}>
-                        {targetService ? `→ ${targetService.name}` : "→ sitio estático"}
+                        {targetService ? `→ ${targetService.name}` : t("domains.toStatic")}
                       </span>
                       {domain.autoManaged && <span className={styles.domainProvider}>auto</span>}
                     </div>
@@ -674,16 +686,16 @@ export default function SiteConsolePage() {
                     {domain.lastError && <p className={styles.domainError}>{domain.lastError}</p>}
 
                     <div className={styles.domainMeta}>
-                      <span>DNS: {domain.routingOk ? "apunta al edge" : "pendiente"}</span>
-                      <span>SSL: {SSL_STATUS[domain.sslStatus]}</span>
+                      <span>{t("domains.dnsState", { state: domain.routingOk ? t("domains.pointsToEdge") : t("domains.pending") })}</span>
+                      <span>{t("domains.sslState", { state: t(SSL_STATUS_KEY[domain.sslStatus]) })}</span>
                       {domain.sslExpiresAt && (
-                        <span>Vence: {new Date(domain.sslExpiresAt).toLocaleDateString("es")}</span>
+                        <span>{t("domains.expiresOn", { date: formatDate(domain.sslExpiresAt) })}</span>
                       )}
                     </div>
 
                     {domain.dnsRecord.name && domain.dnsRecord.value && domain.status !== "VERIFIED" && (
                       <div className={styles.dnsBox}>
-                        <span className={styles.dnsLabel}>Propiedad</span>
+                        <span className={styles.dnsLabel}>{t("domains.ownership")}</span>
                         <code className={styles.dnsValue}>
                           {domain.dnsRecord.type} {domain.dnsRecord.name} → {domain.dnsRecord.value}
                         </code>
@@ -693,14 +705,14 @@ export default function SiteConsolePage() {
                             copyText(`txt-${domain.id}`, `${domain.dnsRecord.name} ${domain.dnsRecord.value}`)
                           }
                         >
-                          {copiedKey === `txt-${domain.id}` ? "¡Copiado!" : "Copiar"}
+                          {copiedKey === `txt-${domain.id}` ? t("domains.copied") : t("domains.copy")}
                         </button>
                       </div>
                     )}
 
                     {domain.instructions && (
                       <div className={styles.dnsBox}>
-                        <span className={styles.dnsLabel}>Tráfico</span>
+                        <span className={styles.dnsLabel}>{t("domains.traffic")}</span>
                         <code className={styles.dnsValue}>
                           {domain.instructions.recordType} {domain.instructions.recordName} →{" "}
                           {domain.instructions.recordValue}
@@ -714,7 +726,7 @@ export default function SiteConsolePage() {
                             )
                           }
                         >
-                          {copiedKey === `route-${domain.id}` ? "¡Copiado!" : "Copiar"}
+                          {copiedKey === `route-${domain.id}` ? t("domains.copied") : t("domains.copy")}
                         </button>
                       </div>
                     )}
@@ -726,7 +738,7 @@ export default function SiteConsolePage() {
                           disabled={busy === "domain-verify"}
                           onClick={() => verifyDomainById(domain.id)}
                         >
-                          {busy === "domain-verify" ? "Comprobando…" : "Verificar propiedad"}
+                          {busy === "domain-verify" ? t("domains.checking") : t("domains.verifyOwnership")}
                         </button>
                       ) : (
                         <button
@@ -734,7 +746,7 @@ export default function SiteConsolePage() {
                           disabled={busy === "domain-check"}
                           onClick={() => checkDomainById(domain.id)}
                         >
-                          {busy === "domain-check" ? "Comprobando…" : "Comprobar DNS + SSL"}
+                          {busy === "domain-check" ? t("domains.checking") : t("domains.checkDnsSsl")}
                         </button>
                       )}
                       <button
@@ -742,7 +754,7 @@ export default function SiteConsolePage() {
                         disabled={busy === "domain-delete"}
                         onClick={() => removeDomainById(domain.id, domain.hostname)}
                       >
-                        Desconectar
+                        {t("common.disconnect")}
                       </button>
                     </div>
                   </li>
@@ -759,8 +771,7 @@ export default function SiteConsolePage() {
             <span className={styles.domainProvider}>GitHub App</span>
           </div>
           <p className={styles.dim}>
-            Conectá un repositorio para publicar desde GitHub: los pushes a la rama principal
-            despliegan producción y las pull requests generan previews.
+            {t("github.intro")}
           </p>
 
           <div className={styles.domainForm}>
@@ -769,14 +780,14 @@ export default function SiteConsolePage() {
                 className={btnPrimary}
                 href={`https://github.com/apps/${process.env.NEXT_PUBLIC_GITHUB_APP_SLUG}/installations/new?state=${encodeURIComponent(`${workspaceId}:${websiteId}`)}`}
               >
-                Instalar GitHub App
+                {t("github.install")}
               </a>
             ) : (
-              <span className={styles.dim}>Configurá NEXT_PUBLIC_GITHUB_APP_SLUG para habilitar la instalación.</span>
+              <span className={styles.dim}>{t("github.configureSlug")}</span>
             )}
             <input
               className={inputClass}
-              placeholder="Installation ID (si ya instalaste la app)"
+              placeholder={t("github.installationPlaceholder")}
               value={githubInstallationId}
               onChange={(e) => setGithubInstallationId(e.target.value)}
               inputMode="numeric"
@@ -787,7 +798,7 @@ export default function SiteConsolePage() {
               disabled={busy === "github-repos"}
               onClick={() => loadGitHubRepos()}
             >
-              {busy === "github-repos" ? "Cargando…" : "Ver repositorios"}
+              {busy === "github-repos" ? t("github.loading") : t("github.viewRepos")}
             </button>
           </div>
 
@@ -797,11 +808,11 @@ export default function SiteConsolePage() {
                 className={selectClass}
                 value={githubRepoId}
                 onChange={(e) => setGithubRepoId(e.target.value)}
-                aria-label="Repositorio"
+                aria-label={t("github.repoAria")}
               >
                 {githubRepos.map((repo) => (
                   <option key={repo.id} value={repo.id}>
-                    {repo.fullName}{repo.private ? " · privado" : ""}
+                    {repo.fullName}{repo.private ? ` · ${t("github.private")}` : ""}
                   </option>
                 ))}
               </select>
@@ -809,9 +820,9 @@ export default function SiteConsolePage() {
                 className={selectClass}
                 value={githubServiceId}
                 onChange={(e) => setGithubServiceId(e.target.value)}
-                aria-label="Servicio a desplegar"
+                aria-label={t("github.serviceAria")}
               >
-                <option value="">Sitio estático (por defecto)</option>
+                <option value="">{t("domains.staticDefault")}</option>
                 {services.map((service) => (
                   <option key={service.id} value={service.id}>
                     {service.name} · {service.hostname}
@@ -823,13 +834,13 @@ export default function SiteConsolePage() {
                 disabled={busy === "github-connect"}
                 onClick={() => connectGitHubRepo()}
               >
-                {busy === "github-connect" ? "Conectando…" : "Conectar repositorio"}
+                {busy === "github-connect" ? t("github.connecting") : t("github.connectRepo")}
               </button>
             </div>
           )}
 
           {githubConnections.length === 0 ? (
-            <p className={styles.empty}>Todavía no hay repositorios conectados.</p>
+            <p className={styles.empty}>{t("github.empty")}</p>
           ) : (
             <ul className={styles.domainList}>
               {githubConnections.map((connection) => {
@@ -840,9 +851,9 @@ export default function SiteConsolePage() {
                   <li key={connection.id} className={styles.domainItem}>
                     <div className={styles.domainHead}>
                       <strong className={styles.mono}>{connection.repositoryFullName}</strong>
-                      <span className={`${styles.badge} ${styles.domainOk}`}>Conectado</span>
+                      <span className={`${styles.badge} ${styles.domainOk}`}>{t("github.connected")}</span>
                       <span className={styles.dim}>
-                        rama {connection.defaultBranch} · {targetServices ? targetServices.name : "sitio estático"}
+                        {t("github.branch", { branch: connection.defaultBranch })} · {targetServices ? targetServices.name : t("common.staticSite")}
                       </span>
                     </div>
                     <div className={styles.domainActions}>
@@ -851,7 +862,7 @@ export default function SiteConsolePage() {
                         disabled={busy === "github-disconnect"}
                         onClick={() => disconnectGitHubRepo(connection.id, connection.repositoryFullName)}
                       >
-                        Desconectar
+                        {t("common.disconnect")}
                       </button>
                     </div>
                   </li>
@@ -861,12 +872,12 @@ export default function SiteConsolePage() {
           )}
         </section>
 
-        {/* ── Monetización ── */}
-        <section className={`${styles.panel} ${styles.span2}`} aria-label="Monetización">
-          <h2 className={styles.panelTitle}>Monetización recurrente</h2>
+        {/* ── Monetization ── */}
+        <section className={`${styles.panel} ${styles.span2}`} aria-label={t("money.aria")}>
+          <h2 className={styles.panelTitle}>{t("money.title")}</h2>
           <div className={styles.twoCols}>
             {subscriptionCard(
-              "Hosting + infraestructura",
+              t("money.hosting"),
               hostingSub,
               plansByKind("HOSTING"),
               hostingPlanId,
@@ -874,7 +885,7 @@ export default function SiteConsolePage() {
               "HOSTING"
             )}
             {subscriptionCard(
-              "Mantenimiento (tier)",
+              t("money.tier"),
               tierSub,
               plansByKind("MAINTENANCE"),
               tierPlanId,
@@ -883,22 +894,22 @@ export default function SiteConsolePage() {
               allowance && allowance.hasMembership ? (
                 <p className={styles.allowanceLine}>
                   {allowance.quotaIncluded === null
-                    ? "Cambios ilimitados incluidos."
-                    : `${allowance.usedThisPeriod}/${allowance.quotaIncluded} usadas este período${allowance.remaining !== null ? ` — quedan ${allowance.remaining}` : ""}`}
+                    ? t("money.unlimitedChanges")
+                    : `${t("money.usage", { used: allowance.usedThisPeriod, quota: allowance.quotaIncluded })}${allowance.remaining !== null ? t("money.remainingSuffix", { remaining: allowance.remaining }) : ""}`}
                 </p>
               ) : undefined
             )}
           </div>
         </section>
 
-        {/* ── Cobros únicos ── */}
-        <section className={styles.panel} aria-label="Cobros únicos">
-          <h2 className={styles.panelTitle}>Cobro único (proyecto)</h2>
+        {/* ── One-time charges ── */}
+        <section className={styles.panel} aria-label={t("charge.aria")}>
+          <h2 className={styles.panelTitle}>{t("charge.title")}</h2>
           <div className={styles.stack}>
-            <input className={inputClass} placeholder='Ej: "Diseño y desarrollo inicial"' value={chargeTitle} onChange={(e) => setChargeTitle(e.target.value)} />
+            <input className={inputClass} placeholder={t("charge.titlePlaceholder")} value={chargeTitle} onChange={(e) => setChargeTitle(e.target.value)} />
             <input className={inputClass} placeholder="1500.00" inputMode="decimal" value={chargePrice} onChange={(e) => setChargePrice(e.target.value)} />
             <button className={btnPrimary} disabled={busy === "create-charge"} onClick={() => createOneTimeCharge()}>
-              {copiedKey?.startsWith("charge-") ? "¡Creado y link copiado!" : busy === "create-charge" ? "Creando…" : "Crear cobro + copiar link"}
+              {copiedKey?.startsWith("charge-") ? t("charge.created") : busy === "create-charge" ? t("charge.creating") : t("charge.create")}
             </button>
           </div>
           {charges.length > 0 && (
@@ -907,14 +918,14 @@ export default function SiteConsolePage() {
                 <li key={c.id} className={styles.chargeRow}>
                   <span>{c.title}</span>
                   <span className={`${styles.badge} ${styles[`chg-${c.status.toLowerCase()}`]}`}>
-                    {c.status === "PAID" ? "Pagado" : c.status === "PENDING" ? "Pendiente" : "Cancelado"}
+                    {t(CHARGE_STATUS_KEY[c.status])}
                   </span>
                   <span className={`${styles.mono} ${styles.right}`}>
                     {moneyFromDecimal(c.amountDecimal, c.currency)}
                   </span>
                   {c.status === "PENDING" && (
                     <button className={styles.linkBtn} disabled={busy === `cancel-charge-${c.id}`} onClick={() => cancelChargeById(c.id)}>
-                      Cancelar
+                      {t("charge.cancel")}
                     </button>
                   )}
                 </li>
@@ -923,18 +934,18 @@ export default function SiteConsolePage() {
           )}
         </section>
 
-        {/* ── Mantenimiento ── */}
-        <section className={`${styles.panel} ${styles.span2}`} aria-label="Solicitudes de mantenimiento">
-          <h2 className={styles.panelTitle}>Solicitudes de mantenimiento</h2>
+        {/* ── Maintenance ── */}
+        <section className={`${styles.panel} ${styles.span2}`} aria-label={t("maint.title")}>
+          <h2 className={styles.panelTitle}>{t("maint.title")}</h2>
           {requests.length === 0 ? (
-            <p className={styles.empty}>Sin solicitudes. Tu cliente puede pedir cambios desde su portal.</p>
+            <p className={styles.empty}>{t("maint.empty")}</p>
           ) : (
             <ul className={styles.reqList}>
               {requests.map((r) => (
                 <li key={r.id} className={styles.reqItem}>
                   <div className={styles.reqHead}>
                     <strong>{r.title}</strong>
-                    <span className={styles.badge}>{REQ_STATUS[r.status]}</span>
+                    <span className={styles.badge}>{t(REQ_STATUS_KEY[r.status])}</span>
                   </div>
                   <p className={styles.reqDesc}>{r.description}</p>
                   {r.priceCents !== null && (
@@ -943,21 +954,21 @@ export default function SiteConsolePage() {
                   <div className={styles.reqActions}>
                     {r.status === "OPEN" && (
                       <>
-                        <button className={btnGhost} disabled={busy === `req-${r.id}`} onClick={() => requestAction("quote", r.id)}>Cotizar</button>
-                        <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("start", r.id)}>Iniciar</button>
+                        <button className={btnGhost} disabled={busy === `req-${r.id}`} onClick={() => requestAction("quote", r.id)}>{t("maint.quote")}</button>
+                        <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("start", r.id)}>{t("maint.start")}</button>
                       </>
                     )}
         {r.status === "PAID" && (
-          <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("start", r.id)}>Iniciar</button>
+          <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("start", r.id)}>{t("maint.start")}</button>
         )}
         {r.status === "IN_PROGRESS" && (
-          <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("complete", r.id)}>Completar</button>
+          <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("complete", r.id)}>{t("maint.complete")}</button>
         )}
         {r.status === "PENDING_PAYMENT" && (
-          <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("mark-paid", r.id)}>Marcar pagada</button>
+          <button className={btnPrimary} disabled={busy === `req-${r.id}`} onClick={() => requestAction("mark-paid", r.id)}>{t("maint.markPaid")}</button>
         )}
                     {r.status === "COMPLETED" && (
-                      <button className={btnGhost} disabled={busy === `req-${r.id}`} onClick={() => requestAction("approve", r.id)}>Aprobar por el cliente</button>
+                      <button className={btnGhost} disabled={busy === `req-${r.id}`} onClick={() => requestAction("approve", r.id)}>{t("maint.approveByClient")}</button>
                     )}
                   </div>
                 </li>

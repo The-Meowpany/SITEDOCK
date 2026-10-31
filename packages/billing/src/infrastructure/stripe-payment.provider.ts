@@ -6,7 +6,7 @@ import { verifyStripeSignature } from "./stripe-signature";
 
 export interface StripePaymentProviderConfig {
   secretKey: string;
-  /** Whsec del endpoint de webhooks — la autoridad económica de Stripe. */
+  /** Webhook endpoint's whsec — Stripe's economic authority. */
   webhookSecret: string;
   apiBase?: string;
   fetchImpl?: typeof fetch;
@@ -41,15 +41,15 @@ interface StripeEventEnvelope {
 }
 
 /**
- * Adapter REAL de Stripe (Fase 16 / ADR-006) que implementa el MISMO port
- * `PaymentProvider` que el mock — el pipeline verify→claim→process no cambia,
- * solo el origen del dinero.
+ * REAL Stripe adapter (Phase 16 / ADR-006) that implements the SAME
+ * `PaymentProvider` port as the mock — the verify→claim→process pipeline does not change,
+ * only the origin of the money.
  *
- * Reglas respetadas:
- * - Metadata lleva nuestros ids (subscription_id / charge_id): el estado
- *   económico definitivo lo declara el EVENTO confirmado, nunca el frontend.
- * - La firma se verifica con el esquema real de Stripe (t + v1 HMAC-SHA256).
- * - Dinero siempre en centavos enteros.
+ * Rules followed:
+ * - Metadata carries our ids (subscription_id / charge_id): the final economic
+ *   state is declared by the confirmed EVENT, never by the frontend.
+ * - The signature is verified with Stripe's real scheme (t + v1 HMAC-SHA256).
+ * - Money is always in whole cents.
  */
 export class StripePaymentProvider implements PaymentProvider {
   readonly name = "stripe";
@@ -92,8 +92,8 @@ export class StripePaymentProvider implements PaymentProvider {
           },
         ],
       },
-      // Idempotencia end-to-end (Fase 19 §7): reintentar la creación tras una
-      // respuesta perdida produce LA MISMA sesión, nunca un segundo cobro.
+      // End-to-end idempotency (Phase 19 §7): retrying the creation after a
+      // lost response yields THE SAME session, never a second charge.
       { idempotencyKey: `checkout:subscription:${params.subscriptionId}` }
     );
     return { id: session.id, url: session.url ?? "", status: "OPEN" };
@@ -144,7 +144,7 @@ export class StripePaymentProvider implements PaymentProvider {
     switch (envelope.type) {
       case "checkout.session.completed": {
         if (obj.mode === "payment") {
-          // Cobro único — el charge_id viajó en metadata al crear la sesión.
+          // One-time charge — the charge_id traveled in metadata when the session was created.
           const externalChargeId = obj.metadata?.charge_id ?? obj.client_reference_id ?? "";
           if (!externalChargeId) throw new Error("checkout.session.completed without charge_id metadata");
           return {
@@ -225,9 +225,9 @@ export class StripePaymentProvider implements PaymentProvider {
         };
 
       default:
-        // Eventos de Stripe no relevantes para el ledger (ping, customer.updated,
-        // payout.created...) se ACKean como no-op: el pipeline los marca PROCESSED
-        // sin mutar nada.
+        // Stripe events not relevant to the ledger (ping, customer.updated,
+        // payout.created...) are ACKed as a no-op: the pipeline marks them PROCESSED
+        // without mutating anything.
         return { type: "ignored", eventId };
     }
   }

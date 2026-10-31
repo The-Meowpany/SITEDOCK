@@ -23,14 +23,14 @@ function hmac(key: Buffer | string, data: string): Buffer {
 }
 
 /**
- * StorageProvider REAL sobre la API REST de S3 con firma SigV4 implementada
- * localmente (ADR-003/006: sin SDK pesado; fetch inyectado para tests offline).
+ * REAL StorageProvider over the S3 REST API with SigV4 signing implemented
+ * locally (ADR-003/006: no heavy SDK; injected fetch for offline tests).
  *
- * Convenciones:
+ * Conventions:
  * - Virtual-hosted style: https://{bucket}.s3.{region}.amazonaws.com/{key}
- * - Payloads siempre con SHA-256 declarado ( UNSIGNED no se usa ).
- * - List usa list-type=2 y extrae <Key> del XML con un parser mínimo
- *   documentado (los listados de S3 son planos y acotados).
+ * - Payloads always carry a declared SHA-256 ( UNSIGNED is not used ).
+ * - List uses list-type=2 and extracts <Key> from the XML with a minimal parser
+ *   documented (S3 listings are flat and bounded).
  */
 export class S3StorageProvider implements StorageProvider {
   private readonly baseUrl: URL;
@@ -48,18 +48,18 @@ export class S3StorageProvider implements StorageProvider {
       : new URL(`https://${config.bucket}.s3.${config.region}.amazonaws.com/`);
 
     if (base.protocol !== "https:" && base.protocol !== "http:") {
-      throw new InfrastructureError("S3 endpoint inválido: protocolo no permitido", "S3_CONFIG_INVALID_ENDPOINT");
+      throw new InfrastructureError("Invalid S3 endpoint: protocol not allowed", "S3_CONFIG_INVALID_ENDPOINT");
     }
 
     this.baseUrl = base;
   }
 
-  // ── Firma SigV4 ─────────────────────────────────────────
+  // ── SigV4 signature ────────────────────────────────────
 
   /**
-   * Fase 19 §15/§23 — defense in depth: los keys se construyen internamente
-   * con ids UUID, pero si algún día un input externo llega aquí, el path
-   * traversal y el escape de prefijo quedan bloqueados.
+   * Phase 19 §15/§23 — defense in depth: keys are built internally
+   * with UUID ids, but if an external input ever reaches this point, path
+   * traversal and prefix escape are blocked.
    */
   private sanitizeKey(key: string): string {
     if (
@@ -122,7 +122,7 @@ export class S3StorageProvider implements StorageProvider {
     const canonicalRequest = [
       method,
       canonicalUri,
-      "", // query string vacío para object ops
+      "", // empty query string for object ops
       canonicalHeaders,
       signedHeaders,
       payloadHash,
@@ -163,7 +163,7 @@ export class S3StorageProvider implements StorageProvider {
       });
     } catch (err) {
       throw new InfrastructureError(
-        `S3 request falló (${method} ${key}): ${(err as Error).message}`,
+        `S3 request failed (${method} ${key}): ${(err as Error).message}`,
         "STORAGE_REQUEST_FAILED"
       );
     }
@@ -197,7 +197,7 @@ export class S3StorageProvider implements StorageProvider {
   async delete(path: string): Promise<void> {
     const key = this.sanitizeKey(path);
     const res = await this.do("DELETE", key);
-    // DELETE es idempotente en S3: 204 o 404 son éxito.
+    // DELETE is idempotent in S3: 204 or 404 both count as success.
     if (!res.ok && res.status !== 404) {
       throw new InfrastructureError(`S3 DELETE ${path} → ${res.status}`, "STORAGE_DELETE_FAILED");
     }
@@ -209,7 +209,7 @@ export class S3StorageProvider implements StorageProvider {
     return res.ok;
   }
 
-  /** Parser XML mínimo: extrae <Key>…</Key> de un ListObjectsV2 paginable. */
+  /** Minimal XML parser: extracts <Key>…</Key> from a paginated ListObjectsV2. */
   async list(prefix: string): Promise<string[]> {
     const queryUrl = new URL(
       `${this.config.endpoint ?? `https://${this.config.bucket}.s3.${this.config.region}.amazonaws.com`}`
@@ -231,7 +231,7 @@ export class S3StorageProvider implements StorageProvider {
       try {
         res = await (this.config.fetchImpl ?? fetch)(url, { method: "GET", headers });
       } catch (err) {
-        throw new InfrastructureError(`S3 LIST falló: ${(err as Error).message}`, "STORAGE_LIST_FAILED");
+        throw new InfrastructureError(`S3 LIST failed: ${(err as Error).message}`, "STORAGE_LIST_FAILED");
       }
       if (!res.ok) {
         throw new InfrastructureError(`S3 LIST → ${res.status}`, "STORAGE_LIST_FAILED");
@@ -244,7 +244,7 @@ export class S3StorageProvider implements StorageProvider {
     return keys;
   }
 
-  /** Firma variante para requests con query string (canonical query ordenada). */
+  /** Signing variant for requests with a query string (sorted canonical query). */
   private signListHeaders(canonicalQuery: string): Record<string, string> {
     const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
     const dateStamp = amzDate.slice(0, 8);

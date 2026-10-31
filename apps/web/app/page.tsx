@@ -4,24 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
 import { api, type WebsiteDetail, type WorkspaceSummary } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 
 interface Option {
   workspace: WorkspaceSummary;
   website: WebsiteDetail;
 }
-
-const CHIP_LABEL: Record<WebsiteDetail["status"], string> = {
-  LIVE: "En línea",
-  PAST_DUE: "Pago pendiente",
-  GRACE_PERIOD: "Gracia",
-  SUSPENDED: "Suspendido",
-  DRAFT: "En preparación",
-  PREVIEW: "Vista previa",
-  PENDING_APPROVAL: "Por aprobar",
-  APPROVED: "Aprobado",
-  ARCHIVED: "Archivado",
-  DELETED: "Eliminado",
-};
 
 const CHIP_TONE: Partial<Record<WebsiteDetail["status"], string>> = {
   LIVE: styles.live,
@@ -32,6 +20,7 @@ const CHIP_TONE: Partial<Record<WebsiteDetail["status"], string>> = {
 
 export default function HomePage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [state, setState] = useState<"loading" | "picking" | "empty">("loading");
   const [options, setOptions] = useState<Option[]>([]);
 
@@ -81,7 +70,7 @@ export default function HomePage() {
   if (state === "loading") {
     return (
       <main className={styles.center}>
-        <p className={styles.loading}>Cargando…</p>
+        <p className={styles.loading}>{t("home.loading")}</p>
       </main>
     );
   }
@@ -91,9 +80,9 @@ export default function HomePage() {
       <main className={styles.center}>
         <div className={styles.emptyCard}>
           <p className={styles.eyebrow}>SiteDock</p>
-          <h1 className={styles.emptyTitle}>Todavía no hay sitios para mostrar</h1>
+          <h1 className={styles.emptyTitle}>{t("home.empty.title")}</h1>
           <p className={styles.emptyBody}>
-            Cuando tu desarrollador te invite a un workspace con un sitio, vas a verlo acá.
+            {t("home.empty.body")}
           </p>
         </div>
       </main>
@@ -104,7 +93,7 @@ export default function HomePage() {
     <main className={styles.center}>
       <div className={styles.pickerCard}>
         <p className={styles.eyebrow}>SiteDock</p>
-        <h1 className={styles.emptyTitle}>Elegí un sitio</h1>
+        <h1 className={styles.emptyTitle}>{t("home.pick")}</h1>
         <ul className={styles.pickerList}>
           {options.map(({ workspace, website }) => (
             <li key={website.id}>
@@ -118,7 +107,7 @@ export default function HomePage() {
                 </span>
                 <span className={`${styles.chip} ${CHIP_TONE[website.status] ?? ""}`}>
                   <span className={styles.dot} aria-hidden />
-                  {CHIP_LABEL[website.status]}
+                  {t(`chip.${website.status}`)}
                 </span>
               </button>
             </li>
@@ -132,7 +121,7 @@ export default function HomePage() {
               router.replace("/login");
             }}
           >
-            Cerrar sesión
+            {t("home.logout")}
           </button>
         </div>
       </div>

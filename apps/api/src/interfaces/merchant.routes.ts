@@ -36,7 +36,7 @@ function requireStripeConfigured(res: import("express").Response): boolean {
   if (!connectedAccountGateway || !refundGateway) {
     res.status(501).json({
       code: "STRIPE_NOT_CONFIGURED",
-      message: "Stripe no está activo en este entorno (PAYMENT_PROVIDER=stripe requerido)",
+      message: "Stripe is not enabled in this environment (PAYMENT_PROVIDER=stripe required)",
     });
     return false;
   }
@@ -44,7 +44,7 @@ function requireStripeConfigured(res: import("express").Response): boolean {
 }
 
 /**
- * Verifica que el pago pertenece al workspace antes de tocar dinero:
+ * Verifies that the payment belongs to the workspace before touching money:
  * Payment → Invoice → Subscription → Website → workspaceId.
  */
 async function assertPaymentInWorkspace(paymentId: string, workspaceId: string) {
@@ -131,7 +131,7 @@ merchantRouter.get<WorkspaceParams>("/status", async (req, res, next) => {
   }
 });
 
-// ── Refunds (OWNER/ADMIN del workspace, pago verificado en cadena) ──
+// ── Refunds (workspace OWNER/ADMIN, payment verified on-chain) ──
 
 export const refundsRouter = Router({ mergeParams: true });
 refundsRouter.use(requireSession);
@@ -173,7 +173,7 @@ refundsRouter.post<{ workspaceId: string; paymentId: string }>("/:paymentId/refu
   }
 });
 
-// ── Reconciliación (solo PLATFORM_ADMIN) ─────────────────
+// ── Reconciliation (PLATFORM_ADMIN only) ─────────────────
 
 export const reconciliationRouter = Router();
 reconciliationRouter.use(requireSession, requirePlatformAdmin);

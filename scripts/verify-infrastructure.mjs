@@ -2,19 +2,19 @@
 /**
  * SiteDock — Real Infrastructure Verification Suite
  *
- * Ejecuta TODAS las verificaciones contra infraestructura REAL.
- * Cada paso produce evidencia con COMMAND, INPUT, OUTPUT, STATUS y DATE.
+ * Runs ALL verifications against REAL infrastructure.
+ * Each step produces evidence with COMMAND, INPUT, OUTPUT, STATUS and DATE.
  *
- * Uso:
- *   node scripts/verify-infrastructure.mjs              # verifica todo
+ * Usage:
+ *   node scripts/verify-infrastructure.mjs              # verify everything
  *   node scripts/verify-infrastructure.mjs --only docker,postgres,e2e
  *
- * Requisitos por categoría:
- *   docker:    Docker daemon corriendo
- *   postgres:  DATABASE_URL apuntando a PostgreSQL accesible
- *   e2e:       postgres + API en :4000
+ * Requirements per category:
+ *   docker:    Docker daemon running
+ *   postgres:  DATABASE_URL pointing at a reachable PostgreSQL
+ *   e2e:       postgres + API on :4000
  *   stripe:    PAYMENT_PROVIDER=stripe + STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET
- *   s3:        STORAGE_PROVIDER=s3 + S3_* configurado
+ *   s3:        STORAGE_PROVIDER=s3 + S3_* configured
  *   resend:    EMAIL_PROVIDER=resend + RESEND_API_KEY + RESEND_FROM
  */
 

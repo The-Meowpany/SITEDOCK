@@ -23,7 +23,7 @@ export interface ProcessedWebhookResult {
 /**
  * Single entry point for payment-provider webhooks after signature
  * verification (docs/ARCHITECTURE.md §16/§17/§76 — webhook architecture).
- * Handles BOTH commercial lines AND the real-money movements of Fase 16:
+ * Handles BOTH commercial lines AND the real-money movements of Phase 16:
  *   - subscription events (payment.succeeded/failed, subscription.canceled)
  *   - one-time charges (charge.succeeded — the creation/deploy fee)
  *   - refund.succeeded / dispute.created / dispute.closed
@@ -80,9 +80,9 @@ export class ProcessPaymentWebhookUseCase {
 
       switch (event.type) {
         case "payment.succeeded": {
-          // Fase 19 §3 — validación económica: el evento confirmado debe coincidir
-          // con el precio capturado al suscribir. Una divergencia indica desync de
-          // plan o manipulación → excepción explícita, jamás mutación silenciosa.
+          // Phase 19 §3 — economic validation: the confirmed event must match
+          // the price captured at subscription time. A divergence indicates plan
+          // desync or tampering → explicit exception, never a silent mutation.
           if (
             event.amountCents !== subscription.price.amountCents ||
             event.currency !== subscription.price.currency
@@ -248,10 +248,10 @@ export class ProcessPaymentWebhookUseCase {
   }
 
   /**
-   * Refund confirmado por la autoridad externa. Idempotente por
-   * externalRefundId (constraint único) además del claim del evento. El pago
-   * acumula refundedCents y pasa a REFUNDED solo cuando se cubre el total —
-   * un refund parcial NO cambia el status del payment.
+   * Refund confirmed by the external authority. Idempotent by
+   * externalRefundId (unique constraint) in addition to the event claim. The payment
+   * accumulates refundedCents and becomes REFUNDED only when the total is covered —
+   * a partial refund does NOT change the payment status.
    */
   private async handleRefundSucceeded(
     provider: string,
@@ -300,7 +300,7 @@ export class ProcessPaymentWebhookUseCase {
     return { duplicate: false };
   }
 
-  /** Dispute abierto: registro append-only con deadline de evidencia. */
+  /** Dispute opened: append-only record with an evidence deadline. */
   private async handleDisputeCreated(
     provider: string,
     event: Extract<NormalizedProviderEvent, { type: "dispute.created" }>
@@ -334,7 +334,7 @@ export class ProcessPaymentWebhookUseCase {
     return { duplicate: false };
   }
 
-  /** Dispute cerrado: WON/LOST con closedAt — nunca se edita un dispute previo. */
+  /** Dispute closed: WON/LOST with closedAt — a previous dispute is never edited. */
   private async handleDisputeClosed(
     event: Extract<NormalizedProviderEvent, { type: "dispute.closed" }>
   ): Promise<ProcessedWebhookResult> {

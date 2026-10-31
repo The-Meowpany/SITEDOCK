@@ -4,7 +4,7 @@ import { S3StorageProvider } from "./s3-storage.provider";
 import type { StorageProvider } from "../domain/ports";
 
 /**
- * Fábrica del StorageProvider según entorno (ADR-003/006).
+ * StorageProvider factory by environment (ADR-003/006).
  *   STORAGE_PROVIDER=mock (default) → MockStorageProvider (in-process, NOT durable)
  *   STORAGE_PROVIDER=disk           → DiskStorageProvider under STORAGE_DIR
  *   STORAGE_PROVIDER=s3             → S3StorageProvider (S3_BUCKET/S3_REGION/S3_*)

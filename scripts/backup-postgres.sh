@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Backup automatizado de PostgreSQL → S3
-# Ejecutar vía cron: 0 2 * * * /path/to/backup-postgres.sh
+# Automated PostgreSQL backup → S3
+# Run via cron: 0 2 * * * /path/to/backup-postgres.sh
 set -euo pipefail
 
 BACKUP_DIR="/backups"
@@ -11,7 +11,7 @@ BACKUP_PATH="${BACKUP_DIR}/${BACKUP_FILE}"
 
 mkdir -p "${BACKUP_DIR}"
 
-# 1. Dump de la base de datos
+# 1. Database dump
 pg_dump -h "${POSTGRES_HOST:-localhost}" \
         -U "${POSTGRES_USER:-sitedock}" \
         -d "${POSTGRES_DB:-sitedock}" \
@@ -20,22 +20,22 @@ pg_dump -h "${POSTGRES_HOST:-localhost}" \
         --compress=9 \
         > "${BACKUP_PATH}"
 
-# 2. Verificar integridad del backup
+# 2. Verify backup integrity
 if ! gzip -t "${BACKUP_PATH}"; then
-  echo "ERROR: El archivo de backup está corrupto" >&2
+  echo "ERROR: The backup file is corrupt" >&2
   exit 1
 fi
 
-# 3. Subir a S3 (si está configurado)
+# 3. Upload to S3 (if configured)
 if [ -n "${S3_BUCKET:-}" ]; then
   aws s3 cp "${BACKUP_PATH}" "s3://${S3_BUCKET}/backups/${BACKUP_FILE}" \
     --region "${S3_REGION:-us-east-1}"
 fi
 
-# 4. Limpiar backups locales antiguos
+# 4. Clean up old local backups
 find "${BACKUP_DIR}" -name "sitedock_*.sql.gz" -mtime +${RETENTION_DAYS} -delete
 
-# 5. Limpiar backups remotos antiguos (S3)
+# 5. Clean up old remote backups (S3)
 if [ -n "${S3_BUCKET:-}" ]; then
   aws s3api list-object-versions \
     --bucket "${S3_BUCKET}" \
@@ -47,4 +47,4 @@ if [ -n "${S3_BUCKET:-}" ]; then
   done
 fi
 
-echo "Backup completado: ${BACKUP_PATH}"
+echo "Backup completed: ${BACKUP_PATH}"

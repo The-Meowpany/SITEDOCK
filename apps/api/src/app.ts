@@ -4,7 +4,6 @@ import cors from "cors";
 import type { Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
-import crypto from "node:crypto";
 import { randomUUID } from "node:crypto";
 import { config } from "./config";
 import { logger } from "./logger";
@@ -40,6 +39,7 @@ import { adminRouter } from "./interfaces/admin.routes";
 import { serviceRouter } from "./interfaces/service.routes";
 import { environmentRouter } from "./interfaces/environment.routes";
 import { githubRouter } from "@sitedock/github";
+import { requireTrustedOrigin } from "./middleware/trusted-origin";
 import { requireSession } from "./middleware/require-session";
 import { apiTokensRouter } from "./interfaces/api-tokens.routes";
 import { authenticateApiToken, apiTokenPathGuard, apiTokenScopeGuard } from "./middleware/api-token-auth";
@@ -47,10 +47,10 @@ import { authenticateApiToken, apiTokenPathGuard, apiTokenScopeGuard } from "./m
 export function createApp() {
   const app = express();
 
-  // Fase 23 §11 — trust proxy: cuando la API corre detrás de un reverse proxy
-  // (Caddy/Nginx), Express debe confiar en X-Forwarded-For para que
-  // express-rate-limit identifique la IP real del cliente y no la IP del proxy.
-  // En producción esto SIEMPRE está activo porque el TLS lo maneja el proxy.
+  // Phase 23 §11 — trust proxy: when the API runs behind a reverse proxy
+  // (Caddy/Nginx), Express must trust X-Forwarded-For so that
+  // express-rate-limit identifies the client's real IP and not the proxy's IP.
+  // In production this is ALWAYS enabled because TLS is terminated by the proxy.
   if (config.isProduction || process.env.TRUST_PROXY === "true") {
     app.set("trust proxy", true);
   }
@@ -85,47 +85,15 @@ export function createApp() {
   // ask URL never reaches the request logger.
   app.use("/internal/tls", tlsAskRouter);
 
-// CSRF protection: the on-demand TLS "ask" endpoint is reachable by the
-// edge (Caddy consults it on certificate renewals) and has no session, so
-// same-site GET requests are the only way to reach it. Add a SameSite=Strict
-// cookie on first contact; the browser resends it on the same site, which is
-// enough to make cross-site (CSRF) requests fail the cookie check. State
-// changing requests cross the site anyway, so the secret remains the real
-// gate: a cross-site request cannot guess TLS_ASK_SECRET.
-//
-// The CSRF nonce is bound to the current TLS request and to the originating
-// request so the token can only be issued and consumed by the same inbound
-// task. That prevents an attacker from pre-generating a nonce for a different
-// session and replaying it here.
-app.use("/internal/tls", (req, _res, next) => {
-  const cookie = req.cookies?.csrfTls;
-  const nonce = req.cookies?.csrfNonce as string | undefined;
-  const token = req.headers["x-csrf-tls"];
-  const origin = req.headers.origin;
-
-  const generatedSecret = (key: string) => {
-    const secret = crypto.randomBytes(32).toString("hex");
-    req.cookies = { ...req.cookies, [key]: secret };
-    return secret;
-  };
-
-  if (cookie === token || token === "" || (origin && origin === token)) {
-    if (!cookie) {
-      const secret = generatedSecret("csrfTls");
-      _res.cookie("csrfTls", secret, { sameSite: "strict", httpOnly: true, maxAge: 86_400_000 });
-    }
-    if (!nonce) {
-      const nonceSecret = generatedSecret("csrfNonce");
-      _res.cookie("csrfNonce", nonceSecret, { sameSite: "strict", httpOnly: true, maxAge: 86_400_000 });
-    }
-    next();
-    return;
-  }
-  _res.status(403).json({ code: "FORBIDDEN", message: "CSRF protection" });
-});
   app.use(hostRoutingMiddleware);
   app.use(express.json({ limit: "12mb" }));
   app.use(cookieParser());
+  // CSRF defence for the cookie-authenticated API: browsers always attach an
+  // Origin header to cross-site state-changing requests, so reject any
+  // mutating request whose Origin is not an allowed dashboard origin. Requests
+  // without Origin (server-to-server: webhooks, API tokens, curl) are not
+  // browser-driven CSRF vectors. Complements the sid cookie's SameSite=Lax.
+  app.use(requireTrustedOrigin(config.corsOrigin));
   app.use(assignRequestId);
   app.use(pinoHttp({ logger, genReqId: (req) => req.requestId ?? randomUUID() }));
 

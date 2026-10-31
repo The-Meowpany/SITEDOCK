@@ -1,7 +1,7 @@
 import { Money, WorkspaceId } from "@sitedock/shared";
 
 /**
- * MONEY MOVEMENT GATEWAYS — Fase 16 (ADR-006).
+ * MONEY MOVEMENT GATEWAYS — Phase 16 (ADR-006).
  *
  * Stripe is an EXTERNAL AUTHORITY: SiteDock never marks money moved because a
  * frontend said so — only verified provider events do. These ports keep every
@@ -41,7 +41,7 @@ export interface RefundGateway {
   }): Promise<{ externalRefundId: string; status: "SUCCEEDED" | "PENDING" }>;
 }
 
-// ── Reconciliación Stripe ↔ ledger ────────────────────────
+// ── Stripe ↔ ledger reconciliation ────────────────────────
 
 export interface BalanceTransactionEntry {
   /** The payment this balance transaction settles (payment intent reference). */
@@ -57,12 +57,12 @@ export interface ReconciliationSource {
   listBalanceTransactions(createdSince: Date): Promise<BalanceTransactionEntry[]>;
 }
 
-// ── Reconciliación pura (sin I/O, testeada en aislamiento) ──
+// ── Pure reconciliation (no I/O, tested in isolation) ──
 
 export type ReconciliationExceptionKind =
-  | "MISSING_BALANCE_TRANSACTION" // ledger dice cobrado, Stripe no lo tiene
-  | "AMOUNT_MISMATCH" // montos divergen — jamás se "corrige" en silencio
-  | "UNKNOWN_BALANCE_TRANSACTION"; // Stripe movió dinero que el ledger no conoce
+  | "MISSING_BALANCE_TRANSACTION" // ledger says collected, Stripe does not have it
+  | "AMOUNT_MISMATCH" // amounts diverge — never "corrected" silently
+  | "UNKNOWN_BALANCE_TRANSACTION"; // Stripe moved money that the ledger does not know about
 
 export interface ReconciliationException {
   kind: ReconciliationExceptionKind;
@@ -78,9 +78,9 @@ export interface LedgerSidePayment {
 }
 
 /**
- * Compara el ledger interno contra la autoridad externa y produce EXCEPCIONES
- * explícitas. Regla del brief §4: una discrepancia nunca se arregla mutando
- * saldos en silencio — se declara para investigación humana.
+ * Compares the internal ledger against the external authority and produces explicit
+ * EXCEPTIONS. Brief §4 rule: a discrepancy is never fixed by silently mutating
+ * balances — it is declared for human investigation.
  */
 export function reconcilePayments(
   ledgerPayments: LedgerSidePayment[],
@@ -91,7 +91,7 @@ export function reconcilePayments(
 
   for (const entry of stripeEntries) {
     const existing = stripeByPayment.get(entry.externalPaymentId);
-    // Si Stripe trae más de un balance txn por pago, la primera divergencia ya es excepción.
+    // If Stripe returns more than one balance txn per payment, the first divergence is already an exception.
     if (existing && existing.balanceTransactionId !== entry.balanceTransactionId) {
       exceptions.push({
         kind: "AMOUNT_MISMATCH",

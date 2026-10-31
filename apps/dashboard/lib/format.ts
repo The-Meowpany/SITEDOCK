@@ -1,10 +1,13 @@
-const MONTHS_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+import type { MessageKey } from "./i18n/messages";
 
-/** "2026-08" → "ago 26" */
-export function shortMonth(monthKey: string): string {
-  const [year, month] = monthKey.split("-");
+/** "2026-08" → "Aug 26" (localized month abbreviation, always rendered in UTC so it never shifts a month). */
+export function shortMonth(monthKey: string, locale = "en"): string {
+  const [year = "", month = ""] = monthKey.split("-");
   const idx = Number(month) - 1;
-  const name = MONTHS_ES[idx] ?? month;
+  if (!Number.isInteger(idx) || idx < 0 || idx > 11) return `${month} ${year.slice(2)}`;
+  const name = new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" }).format(
+    new Date(Date.UTC(2000, idx, 1))
+  );
   return `${name} ${year.slice(2)}`;
 }
 
@@ -20,20 +23,21 @@ export function bytes(n: number): string {
   return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-const STATUS_LABELS_ES: Record<string, string> = {
-  DRAFT: "Borrador",
-  PREVIEW: "Vista previa",
-  PENDING_APPROVAL: "Esperando aprobación",
-  APPROVED: "Aprobado",
-  LIVE: "En línea",
-  PAST_DUE: "Pago vencido",
-  GRACE_PERIOD: "Período de gracia",
-  SUSPENDED: "Suspendido",
-  ARCHIVED: "Archivado",
+const STATUS_KEYS: Record<string, MessageKey> = {
+  DRAFT: "status.DRAFT",
+  PREVIEW: "status.PREVIEW",
+  PENDING_APPROVAL: "status.PENDING_APPROVAL",
+  APPROVED: "status.APPROVED",
+  LIVE: "status.LIVE",
+  PAST_DUE: "status.PAST_DUE",
+  GRACE_PERIOD: "status.GRACE_PERIOD",
+  SUSPENDED: "status.SUSPENDED",
+  ARCHIVED: "status.ARCHIVED",
 };
 
-export function statusLabel(status: string): string {
-  return STATUS_LABELS_ES[status] ?? status;
+/** Message key for a website status, or null for a status the console does not know (rendered raw). */
+export function statusKey(status: string): MessageKey | null {
+  return STATUS_KEYS[status] ?? null;
 }
 
 export function moneyFromDecimal(decimal: string, currency = "USD"): string {

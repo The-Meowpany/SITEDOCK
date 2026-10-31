@@ -4,16 +4,22 @@ import {
   AcceptWorkspaceInvitationUseCase,
   AddWorkspaceMemberUseCase,
   AssertWorkspaceAccessUseCase,
+  ChangeMemberRoleUseCase,
   CreateWorkspaceInvitationUseCase,
   CreateWorkspaceUseCase,
+  DeleteWorkspaceUseCase,
   ListMyWorkspacesUseCase,
   PrismaWorkspaceInvitationRepository,
   PrismaWorkspaceRepository,
+  RemoveWorkspaceMemberUseCase,
+  RenameWorkspaceUseCase,
+  TransferWorkspaceOwnershipUseCase,
   UpdateWorkspaceBrandingUseCase,
 } from "@sitedock/workspace";
-import { EmailAddress, ConflictError, UserId, WorkspaceId } from "@sitedock/shared";
+import { EmailAddress, ConflictError, ForbiddenError, UserId, WorkspaceId } from "@sitedock/shared";
 import { EnsureClientForUserUseCase, PrismaClientRepository } from "@sitedock/client";
-import { PrismaUserRepository } from "@sitedock/auth";
+import { Argon2PasswordHasher, PrismaUserRepository } from "@sitedock/auth";
+import { authRateLimiter } from "../middleware/rate-limit";
 import { requireSession } from "../middleware/require-session";
 import { config } from "../config";
 import { auditBestEffort } from "../audit";
@@ -30,6 +36,12 @@ const addWorkspaceMember = new AddWorkspaceMemberUseCase(workspaces);
 const createWorkspaceInvitation = new CreateWorkspaceInvitationUseCase(invitations);
 const acceptWorkspaceInvitation = new AcceptWorkspaceInvitationUseCase(invitations, workspaces);
 const ensureClientForUser = new EnsureClientForUserUseCase(clients);
+const passwordHasher = new Argon2PasswordHasher();
+const renameWorkspace = new RenameWorkspaceUseCase(workspaces);
+const changeMemberRole = new ChangeMemberRoleUseCase(workspaces);
+const removeWorkspaceMember = new RemoveWorkspaceMemberUseCase(workspaces, workspaces);
+const transferOwnership = new TransferWorkspaceOwnershipUseCase(workspaces);
+const deleteWorkspace = new DeleteWorkspaceUseCase(workspaces, workspaces);
 
 const createWorkspaceSchema = z.object({ name: z.string().min(2) });
 const inviteSchema = z.object({
@@ -76,7 +88,113 @@ workspaceRouter.get("/:workspaceId", async (req, res, next) => {
   }
 });
 
-// ── White-label branding (Fase 20) ────────────────────────
+// ── Workspace management: rename, members, ownership, deletion ─────────────
+
+/** These change who controls a tenant: API tokens (CI/scripts) must never perform them. */
+function rejectApiToken(req: import("express").Request, res: import("express").Response, next: import("express").NextFunction) {
+  if (req.apiToken) {
+    res.status(403).json({ code: "FORBIDDEN", message: "API tokens cannot manage workspace settings or members" });
+    return;
+  }
+  next();
+}
+
+const uuidParam = z.string().uuid();
+const renameSchema = z.object({ name: z.string().min(2).max(120) });
+const memberRoleSchema = z.object({ role: z.enum(["ADMIN", "DEVELOPER", "CLIENT"]) });
+const transferSchema = z.object({ newOwnerUserId: z.string().uuid(), currentPassword: z.string().min(1) });
+const deleteWorkspaceSchema = z.object({ confirmName: z.string().min(1), currentPassword: z.string().min(1) });
+
+async function requirePassword(userId: string, password: string): Promise<void> {
+  const user = await users.findById(UserId(userId));
+  if (!user || !(await passwordHasher.verify(password, user.passwordHash))) {
+    throw new ForbiddenError("Current password is incorrect");
+  }
+}
+
+workspaceRouter.patch("/:workspaceId", rejectApiToken, async (req, res, next) => {
+  try {
+    const { name } = renameSchema.parse(req.body);
+    const result = await renameWorkspace.execute({ workspaceId: uuidParam.parse(req.params.workspaceId), actorId: req.userId!, name });
+    auditBestEffort({ workspaceId: req.params.workspaceId, actorId: req.userId!, action: "WORKSPACE_RENAMED", resourceType: "Workspace", resourceId: req.params.workspaceId });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+workspaceRouter.get("/:workspaceId/members", rejectApiToken, async (req, res, next) => {
+  try {
+    const workspace = await assertWorkspaceAccess.execute({
+      workspaceId: uuidParam.parse(req.params.workspaceId),
+      userId: req.userId!,
+      requiredRoles: ["OWNER", "ADMIN", "DEVELOPER"],
+    });
+    const members = await Promise.all(
+      workspace.members.map(async (m) => {
+        const user = await users.findById(m.userId);
+        return { userId: m.userId, fullName: user?.fullName ?? null, email: user?.email.value ?? null, role: m.role, joinedAt: m.joinedAt };
+      })
+    );
+    res.json(members);
+  } catch (err) {
+    next(err);
+  }
+});
+
+workspaceRouter.patch("/:workspaceId/members/:userId", rejectApiToken, async (req, res, next) => {
+  try {
+    const { role } = memberRoleSchema.parse(req.body);
+    const workspaceId = uuidParam.parse(req.params.workspaceId);
+    const targetUserId = uuidParam.parse(req.params.userId);
+    await changeMemberRole.execute({ workspaceId, actorId: req.userId!, targetUserId, role });
+    auditBestEffort({ workspaceId, actorId: req.userId!, action: "MEMBER_ROLE_CHANGED", resourceType: "WorkspaceMember", resourceId: targetUserId, metadata: { role } });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+workspaceRouter.delete("/:workspaceId/members/:userId", rejectApiToken, async (req, res, next) => {
+  try {
+    const workspaceId = uuidParam.parse(req.params.workspaceId);
+    const targetUserId = uuidParam.parse(req.params.userId);
+    await removeWorkspaceMember.execute({ workspaceId, actorId: req.userId!, targetUserId });
+    auditBestEffort({ workspaceId, actorId: req.userId!, action: "MEMBER_REMOVED", resourceType: "WorkspaceMember", resourceId: targetUserId, metadata: { self: targetUserId === req.userId } });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+workspaceRouter.post("/:workspaceId/transfer-ownership", authRateLimiter, rejectApiToken, async (req, res, next) => {
+  try {
+    const { newOwnerUserId, currentPassword } = transferSchema.parse(req.body);
+    const workspaceId = uuidParam.parse(req.params.workspaceId);
+    await requirePassword(req.userId!, currentPassword);
+    await transferOwnership.execute({ workspaceId, actorId: req.userId!, newOwnerUserId });
+    auditBestEffort({ workspaceId, actorId: req.userId!, action: "OWNERSHIP_TRANSFERRED", resourceType: "Workspace", resourceId: workspaceId, metadata: { newOwnerUserId } });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+workspaceRouter.delete("/:workspaceId", authRateLimiter, rejectApiToken, async (req, res, next) => {
+  try {
+    const { confirmName, currentPassword } = deleteWorkspaceSchema.parse(req.body);
+    const workspaceId = uuidParam.parse(req.params.workspaceId);
+    await requirePassword(req.userId!, currentPassword);
+    await deleteWorkspace.execute({ workspaceId, actorId: req.userId!, confirmName });
+    // workspaceId is deliberately null: the workspace row (and its FK target) no longer exists.
+    auditBestEffort({ workspaceId: null, actorId: req.userId!, action: "WORKSPACE_DELETED", resourceType: "Workspace", resourceId: workspaceId });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── White-label branding (Phase 20) ──────────────────────
 
 const brandingSchema = z.object({
   branding: z.record(

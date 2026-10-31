@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { createApp } from "../app";
 
 /**
- * Fase 21 — Adversarial multi-tenant security suite.
+ * Phase 21 — Adversarial multi-tenant security suite.
  *
  * These tests exercise the REAL HTTP surface without a database to verify
  * that authorization boundaries are enforced at the middleware/route level.

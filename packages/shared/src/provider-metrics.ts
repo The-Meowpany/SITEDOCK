@@ -1,7 +1,7 @@
 /**
- * Métricas de providers (Fase 19 §17): contadores en proceso, sin dependencias.
- * Suficiente para el endpoint /admin/metrics y para tests. Un colector externo
- * (Prometheus/OTel) puede reemplazar el sink sin tocar a los callers.
+ * Provider metrics (Phase 19 §17): in-process counters, no dependencies.
+ * Enough for the /admin/metrics endpoint and for tests. An external collector
+ * (Prometheus/OTel) can replace the sink without touching the callers.
  */
 
 export type ProviderOutcome = "success" | "failure" | "timeout" | "rate_limited";
@@ -59,10 +59,10 @@ class ProviderMetricsRegistry {
   }
 }
 
-/** Singleton de proceso — los adapters lo importan directamente. */
+/** Process-wide singleton — adapters import it directly. */
 export const providerMetrics = new ProviderMetricsRegistry();
 
-/** Envuelve una operación de provider registrando outcome y latencia. */
+/** Wraps a provider operation, recording its outcome and latency. */
 export async function withProviderMetrics<T>(
   event: Omit<ProviderMetricEvent, "outcome" | "durationMs">,
   fn: () => Promise<T>

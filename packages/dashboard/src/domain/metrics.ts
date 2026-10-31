@@ -4,7 +4,7 @@ import type { SubscriptionSnapshot, WebsiteSnapshot } from "./ports";
 /**
  * Pure metric math for the Developer Dashboard. No I/O, no framework — every
  * function here is deterministic and unit-tested in isolation (docs/ARCHITECTURE.md
- * "CQRS selectivo"): the computation lives on the read side; the write-side
+ * "selective CQRS"): the computation lives on the read side; the write-side
  * aggregates are never involved.
  *
  * Money aggregation primitives (MoneyBreakdown / normalizeToMonthlyCents /

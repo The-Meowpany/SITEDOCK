@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 /**
- * E2E — criterio final del brief (§51) contra un stack local real.
+ * E2E — the brief's final criterion (§51) against a real local stack.
  *
- * Requisitos (en otra terminal):
+ * Requirements (in another terminal):
  *   docker compose up -d
  *   npm run db:migrate -w packages/database
  *   npm run dev                       # API :4000
  *
- * Uso:
- *   node scripts/e2e-demo.mjs                 # API en :4000
+ * Usage:
+ *   node scripts/e2e-demo.mjs                 # API on :4000
  *   BASE_URL=http://localhost:4000 node scripts/e2e-demo.mjs
  *
- * Cubre, en orden: registro → workspace → proyecto → sitio → ZIP →
- * submit/approve/publish (LIVE) → cliente → asignación → tier + hosting →
- * checkout demo → pago (suscripción ACTIVE) → solicitudes de mantenimiento con
- * cuota → cobro único → pago fallido → PAST_DUE → suspensión → recuperación →
- * dashboard con MRR > 0 → audit log poblado.
+ * Covers, in order: register → workspace → project → site → ZIP →
+ * submit/approve/publish (LIVE) → client → assignment → tier + hosting →
+ * demo checkout → payment (ACTIVE subscription) → maintenance requests with
+ * quota → one-time charge → failed payment → PAST_DUE → suspension → recovery →
+ * dashboard with MRR > 0 → populated audit log.
  */
 
 const BASE = process.env.BASE_URL ?? "http://localhost:4000";
@@ -30,7 +30,7 @@ const ok = (msg) => {
 };
 function must(cond, msg) {
   if (!cond) {
-    console.error(`\n✗ FALLO: ${msg}\n`);
+    console.error(`\n✗ FAILURE: ${msg}\n`);
     process.exit(1);
   }
 }
@@ -56,7 +56,7 @@ async function call(method, path, body, extraHeaders = {}) {
 }
 
 async function uploadZip(path, files) {
-  // ZIP mínimo válido (stored) generado en memoria — sin dependencias.
+  // Minimal valid ZIP (stored) generated in memory — no dependencies.
   const crcTable = (() => {
     const t = new Int32Array(256);
     for (let n = 0; n < 256; n++) {
@@ -148,7 +148,7 @@ async function main() {
   console.log(`E2E SiteDock → ${API}`);
   const stamp = Date.now();
 
-  step("1-2 · Registro + login del developer");
+  step("1-2 · Developer registration + login");
   const email = `dev-${stamp}@sitedock.test`;
   {
     const r = await call("POST", "/auth/register", {
@@ -159,8 +159,8 @@ async function main() {
     must(r.status === 201, `registro: ${r.status} ${JSON.stringify(r.json)}`);
     const login = await call("POST", "/auth/login", { email, password: "supersecret" });
     must(login.status === 200, `login: ${login.status} ${JSON.stringify(login.json)}`);
-    must(cookie, "login no emitió cookie de sesión");
-    ok(`cuenta creada y sesión iniciada: ${email}`);
+    must(cookie, "login did not issue a session cookie");
+    ok(`account created and signed in: ${email}`);
   }
 
   step("3 · Workspace");
@@ -172,7 +172,7 @@ async function main() {
     ok(`workspace: ${workspaceId}`);
   }
 
-  step("4 · Proyecto + sitio");
+  step("4 · Project + site");
   let projectId, websiteId;
   {
     const p = await call("POST", `/workspaces/${workspaceId}/projects`, { name: "Restaurante E2E" });
@@ -212,11 +212,11 @@ async function main() {
     ok("sitio LIVE");
   }
 
-  step("9 · Cliente + asignación al sitio");
+  step("9 · Client + assignment to the site");
   let clientId;
   {
     const c = await call("POST", `/workspaces/${workspaceId}/clients`, {
-      fullName: "Juan Pérez",
+      fullName: "John Smith",
       email: `juan-${stamp}@cliente.test`,
     });
     must(c.status === 201, "crear cliente");
@@ -229,11 +229,11 @@ async function main() {
     ok("cliente asignado");
   }
 
-  step("10 · Tier de mantenimiento (Pro · 2 cambios/mes) + plan hosting");
+  step("10 · Maintenance tier (Pro · 2 changes/month) + hosting plan");
   let hostingPlanId, tierPlanId;
   {
     const h = await call("POST", `/workspaces/${workspaceId}/plans`, {
-      name: "Hosting estándar",
+      name: "Standard hosting",
       kind: "HOSTING",
       priceDecimal: "29.00",
       currency: "USD",
@@ -255,24 +255,24 @@ async function main() {
     ok("planes creados (hosting + tier Pro)");
   }
 
-  step("11 · Suscripciones hosting + mantenimiento");
+  step("11 · Hosting + maintenance subscriptions");
   {
     const h = await call("POST", `/workspaces/${workspaceId}/websites/${websiteId}/subscription`, {
       planId: hostingPlanId,
     });
-    must(h.status === 201, "suscripción hosting");
+    must(h.status === 201, "hosting subscription");
 
     const m = await call("POST", `/workspaces/${workspaceId}/websites/${websiteId}/subscription`, {
       planId: tierPlanId,
     });
-    must(m.status === 201, "membresía mantenimiento");
+    must(m.status === 201, "maintenance membership");
     ok("ambas suscripciones creadas (INCOMPLETE)");
   }
 
-  step("12 · Checkout + pago demo → ACTIVE");
+  step("12 · Checkout + demo payment → ACTIVE");
   {
     const sub = await call("GET", `/workspaces/${workspaceId}/websites/${websiteId}/subscription`);
-    must(sub.json?.id, "leer suscripción hosting");
+    must(sub.json?.id, "read hosting subscription");
     const co = await call(
       "POST",
       `/workspaces/${workspaceId}/websites/${websiteId}/subscription/${sub.json.id}/checkout`,
@@ -282,34 +282,34 @@ async function main() {
     const sessionId = String(co.json.checkoutUrl).split("/").pop();
     ok(`checkout: ${co.json.checkoutUrl}`);
 
-    // El CLIENTE paga por la página pública demo (mismo pipeline que el webhook).
+    // The CLIENT pays through the public demo page (same pipeline as the webhook).
     const pay = await fetch(`${BASE}/api/v1/public/demo-checkout/${sessionId}/pay`, { method: "POST" });
-    must(pay.ok, "pago público demo");
+    must(pay.ok, "public demo payment");
 
     const after = await call("GET", `/workspaces/${workspaceId}/websites/${websiteId}/subscription`);
-    must(after.json?.status === "ACTIVE", `suscripción ACTIVE (estado: ${after.json?.status})`);
-    ok("suscripción ACTIVE tras el pago");
+    must(after.json?.status === "ACTIVE", `ACTIVE subscription (status: ${after.json?.status})`);
+    ok("ACTIVE subscription after payment");
   }
 
-  step("13 · Membresía de mantenimiento también paga");
+  step("13 · Maintenance membership also pays");
   {
     const m = await call("GET", `/workspaces/${workspaceId}/websites/${websiteId}/subscription?kind=MAINTENANCE`);
-    must(m.json?.id, "leer membresía mantenimiento");
+    must(m.json?.id, "read maintenance membership");
     const co = await call(
       "POST",
       `/workspaces/${workspaceId}/websites/${websiteId}/subscription/${m.json.id}/checkout`,
       {}
     );
-    must(co.status === 201, "checkout membresía");
+    must(co.status === 201, "membership checkout");
     const pay = await fetch(
       `${BASE}/api/v1/public/demo-checkout/${String(co.json.checkoutUrl).split("/").pop()}/pay`,
       { method: "POST" }
     );
-    must(pay.ok, "pago membresía");
-    ok("membresía de mantenimiento ACTIVE");
+    must(pay.ok, "membership payment");
+    ok("maintenance membership ACTIVE");
   }
 
-  step("14 · Solicitudes de mantenimiento y cuota del tier (2/mes)");
+  step("14 · Maintenance requests and tier quota (2/month)");
   {
     for (let i = 1; i <= 2; i++) {
       const r = await call("POST", `/workspaces/${workspaceId}/websites/${websiteId}/maintenance-requests`, {
@@ -329,10 +329,10 @@ async function main() {
     ok("cuota del tier aplicada (2/2 → over-quota)");
   }
 
-  step("15 · Cobro único por creación/deploy");
+  step("15 · One-time charge for creation/deploy");
   {
     const ch = await call("POST", `/workspaces/${workspaceId}/websites/${websiteId}/charges`, {
-      title: "Diseño y desarrollo inicial",
+      title: "Initial design and development",
       priceDecimal: "1500.00",
       currency: "USD",
     });
@@ -343,21 +343,21 @@ async function main() {
 
     const list = await call("GET", `/workspaces/${workspaceId}/websites/${websiteId}/charges`);
     must(list.json[0]?.status === "PAID", "charge PAID");
-    ok("cobro único PAID ($1500.00)");
+    ok("one-time charge PAID ($1500.00)");
   }
 
-  step("16-20 · Pago fallido → PAST_DUE → suspensión → recuperación → LIVE");
+  step("16-20 · Failed payment → PAST_DUE → suspension → recovery → LIVE");
   {
     const sub = await call("GET", `/workspaces/${workspaceId}/websites/${websiteId}/subscription`);
-    must(sub.json?.id, "leer suscripción hosting");
+    must(sub.json?.id, "read hosting subscription");
 
-    // Nueva sesión de la misma suscripción para poder simular el fallo sobre ella.
+    // New session of the same subscription so the failure can be simulated on it.
     const co = await call(
       "POST",
       `/workspaces/${workspaceId}/websites/${websiteId}/subscription/${sub.json.id}/checkout`,
       {}
     );
-    must(co.status === 201, "nueva sesión de checkout");
+    must(co.status === 201, "new checkout session");
     const sessionId = String(co.json.checkoutUrl).split("/").pop();
 
     const fail = await call(
@@ -368,7 +368,7 @@ async function main() {
     must(fail.status === 200, "simular pago fallido");
 
     const pastDue = await call("GET", `/workspaces/${workspaceId}/websites/${websiteId}/subscription`);
-    must(pastDue.json?.status === "PAST_DUE", "suscripción PAST_DUE");
+    must(pastDue.json?.status === "PAST_DUE", "PAST_DUE subscription");
     ok("pago fallido → PAST_DUE");
 
     const susp = await call("POST", `/workspaces/${workspaceId}/demo-payments/suspend-for-nonpayment`, {
@@ -380,7 +380,7 @@ async function main() {
     must(siteAfter.json.status === "SUSPENDED", "sitio SUSPENDED");
     ok("sitio suspendido por falta de pago");
 
-    // Recuperación: nuevo pago exitoso sobre la misma sesión reactiva todo.
+    // Recovery: a new successful payment on the same session reactivates everything.
     const recover = await call(
       "POST",
       `/workspaces/${workspaceId}/demo-payments/simulate-payment-succeeded`,
@@ -389,13 +389,13 @@ async function main() {
     must(recover.status === 200, "pago recuperado");
 
     const finalSub = await call("GET", `/workspaces/${workspaceId}/websites/${websiteId}/subscription`);
-    must(finalSub.json?.status === "ACTIVE", "suscripción ACTIVE nuevamente");
+    must(finalSub.json?.status === "ACTIVE", "ACTIVE subscription again");
     const finalSite = await call("GET", `/workspaces/${workspaceId}/websites/${websiteId}`);
     must(finalSite.json.status === "LIVE", "sitio LIVE nuevamente");
-    ok("recuperación completa → LIVE");
+    ok("full recovery → LIVE");
   }
 
-  step("21 · Dashboard con MRR > 0 y audit log poblado");
+  step("21 · Dashboard with MRR > 0 and a populated audit log");
   {
     const dash = await call("GET", `/workspaces/${workspaceId}/dashboard`);
     must(dash.status === 200, "dashboard accesible");
@@ -404,14 +404,14 @@ async function main() {
 
     const audit = await call("GET", `/workspaces/${workspaceId}/audit-logs`);
     must(audit.status === 200 && Array.isArray(audit.json) && audit.json.length > 5, "audit log poblado");
-    ok(`dashboard OK — MRR ${(mrrUsd.amountCents / 100).toFixed(2)} USD, ${audit.json.length} entradas de auditoría`);
+    ok(`dashboard OK — MRR ${(mrrUsd.amountCents / 100).toFixed(2)} USD, ${audit.json.length} audit entries`);
   }
 
-  console.log(`\n✅ E2E COMPLETO — ${passed} pasos verificados sin errores.\n`);
+  console.log(`\n✅ E2E COMPLETE — ${passed} steps verified with no errors.\n`);
 }
 
 main().catch((err) => {
-  console.error("\n✗ E2E abortado:", err);
+  console.error("\n✗ E2E aborted:", err);
   process.exit(1);
 });
 

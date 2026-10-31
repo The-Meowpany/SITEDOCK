@@ -31,9 +31,9 @@ export interface Payment {
   provider: string;
   externalPaymentId: string | null;
   platformFee: Money;
-  /** Fase 16 — ancla de reconciliación con la autoridad externa. */
+  /** Phase 16 — reconciliation anchor with the external authority. */
   externalBalanceTxnId: string | null;
-  /** Total devuelto al cliente vía refunds (≤ amount). */
+  /** Total returned to the customer via refunds (≤ amount). */
   refundedCents: number;
   createdAt: Date;
 }
@@ -54,11 +54,11 @@ export type NormalizedProviderEvent =
   | { type: "payment.failed"; eventId: string; externalSubscriptionId: string; externalPaymentId: string; reason: string }
   | { type: "subscription.canceled"; eventId: string; externalSubscriptionId: string }
   | { type: "charge.succeeded"; eventId: string; externalChargeId: string; externalPaymentId: string; amountCents: number; currency: string; externalBalanceTxnId?: string }
-  // Fase 16 — movimientos de dinero reales (autoridad externa):
+  // Phase 16 — real money movements (external authority):
   | { type: "refund.succeeded"; eventId: string; externalPaymentId: string; externalRefundId: string; amountCents: number; currency: string }
   | { type: "dispute.created"; eventId: string; externalPaymentId: string; externalDisputeId: string; amountCents: number; currency: string; evidenceDueBy?: string }
   | { type: "dispute.closed"; eventId: string; externalDisputeId: string; won: boolean }
-  // Eventos del provider no relevantes para el ledger — se ACKean sin mutar nada.
+  // Provider events not relevant to the ledger — they are ACKed without mutating anything.
   | { type: "ignored"; eventId: string };
 
 export interface PaymentProvider {

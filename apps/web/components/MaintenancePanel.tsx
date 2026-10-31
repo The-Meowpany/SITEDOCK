@@ -3,30 +3,21 @@
 import { useState } from "react";
 import styles from "./MaintenancePanel.module.css";
 import { api, type MaintenanceRequestSummary, type TierCoverage } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
+import type { MessageKey, TranslateParams } from "@/lib/i18n";
 
-const STATUS_LABEL: Record<MaintenanceRequestSummary["status"], string> = {
-  OPEN: "Recibido",
-  IN_PROGRESS: "En progreso",
-  WAITING_CLIENT: "Esperando tu respuesta",
-  PENDING_PAYMENT: "Pendiente de pago",
-  PAID: "Pagado",
-  COMPLETED: "Completado — a revisar",
-  APPROVED: "Aprobado",
-  CANCELED: "Cancelado",
-};
-
-function coverageNote(tier: TierCoverage): string {
-  if (!tier.hasMembership) return "Enviado. Tu desarrollador te va a cotizar este cambio.";
+function coverageNote(tier: TierCoverage, t: (key: MessageKey, params?: TranslateParams) => string): string {
+  if (!tier.hasMembership) return t("maint.noMembership");
   if (tier.covered) {
     const left =
       tier.remaining === null || tier.remaining === undefined
-        ? "cambios ilimitados"
+        ? t("maint.unlimited")
         : tier.remaining === 1
-          ? "te queda 1 este período"
-          : `quedan ${tier.remaining} este período`;
-    return `Cubierto por tu plan ${tier.planName} (${left}).`;
+          ? t("maint.oneLeft")
+          : t("maint.nLeft", { count: tier.remaining });
+    return t("maint.covered", { plan: tier.planName ?? "", left });
   }
-  return "Enviado. Ya usaste las incluidas en tu plan, así que tu desarrollador te va a enviar una cotización.";
+  return t("maint.overQuota");
 }
 
 export function MaintenancePanel({
@@ -38,6 +29,7 @@ export function MaintenancePanel({
   websiteId: string;
   initialRequests: MaintenanceRequestSummary[];
 }) {
+  const { t } = useI18n();
   const [requests, setRequests] = useState(initialRequests);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -58,7 +50,7 @@ export function MaintenancePanel({
       }
       setRequests(await api.listMaintenanceRequests(workspaceId, websiteId));
     } catch {
-      setActionError("No pudimos actualizar la solicitud. Probá de nuevo.");
+      setActionError(t("maint.actionError"));
     } finally {
       setBusyId(null);
     }
@@ -79,7 +71,7 @@ export function MaintenancePanel({
       setDescription("");
       setCoverage(result.tier);
     } catch {
-      setError("No pudimos enviar tu solicitud. Probá de nuevo en un momento.");
+      setError(t("maint.submitError"));
     } finally {
       setSubmitting(false);
     }
@@ -88,14 +80,14 @@ export function MaintenancePanel({
   return (
     <div>
       {requests.length === 0 ? (
-        <p className={styles.empty}>Todavía no pediste ningún cambio.</p>
+        <p className={styles.empty}>{t("maint.empty")}</p>
       ) : (
         <ul className={styles.list}>
           {requests.map((r) => (
             <li key={r.id} className={styles.item}>
               <div className={styles.itemHeader}>
                 <span className={styles.itemTitle}>{r.title}</span>
-                <span className={`${styles.badge} ${styles[`status_${r.status}`]}`}>{STATUS_LABEL[r.status]}</span>
+                <span className={`${styles.badge} ${styles[`status_${r.status}`]}`}>{t(`maint.status.${r.status}`)}</span>
               </div>
               <p className={styles.itemDescription}>{r.description}</p>
               {r.priceCents !== null && (
@@ -111,7 +103,7 @@ export function MaintenancePanel({
                     disabled={busyId === r.id}
                     onClick={() => handleAction("approve", r.id)}
                   >
-                    Aprobar trabajo
+                    {t("maint.approve")}
                   </button>
                   <button
                     className={styles.action}
@@ -119,7 +111,7 @@ export function MaintenancePanel({
                     disabled={busyId === r.id}
                     onClick={() => handleAction("changes", r.id)}
                   >
-                    Pedir cambios
+                    {t("maint.requestChanges")}
                   </button>
                 </div>
               )}
@@ -130,10 +122,10 @@ export function MaintenancePanel({
       {actionError && <p className={styles.error} role="alert">{actionError}</p>}
 
       <form className={styles.form} onSubmit={handleSubmit}>
-        <p className={styles.formLabel}>Pedir un cambio</p>
+        <p className={styles.formLabel}>{t("maint.formLabel")}</p>
         <input
           className={styles.input}
-          placeholder="Ej: Cambiar el horario de atención"
+          placeholder={t("maint.titlePlaceholder")}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={120}
@@ -141,7 +133,7 @@ export function MaintenancePanel({
         />
         <textarea
           className={styles.textarea}
-          placeholder="Contanos qué necesitás cambiar en tu sitio."
+          placeholder={t("maint.descPlaceholder")}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
@@ -149,12 +141,12 @@ export function MaintenancePanel({
         />
         {coverage && (
           <p className={styles.coverageNote} role="status">
-            {coverageNote(coverage)}
+            {coverageNote(coverage, t)}
           </p>
         )}
         {error && <p className={styles.error}>{error}</p>}
         <button className={styles.submit} type="submit" disabled={submitting}>
-          {submitting ? "Enviando…" : "Enviar solicitud"}
+          {submitting ? t("maint.sending") : t("maint.send")}
         </button>
       </form>
     </div>

@@ -6,11 +6,11 @@ export interface StripeSignatureVerification {
 }
 
 /**
- * Verifica la firma de un webhook de Stripe con el esquema REAL del proveedor:
+ * Verifies a Stripe webhook signature using the provider's REAL scheme:
  *   Stripe-Signature: t=<unix_ts>,v1=<hmac_sha256(`${t}.${payload}`)>
  *
- * Implementado localmente (sin SDK) para poder testearlo offline contra
- * payloads firmados con el mismo algoritmo — sandbox-first sin red.
+ * Implemented locally (no SDK) so it can be tested offline against
+ * payloads signed with the same algorithm — sandbox-first, no network.
  */
 export function verifyStripeSignature(
   rawBody: Buffer,

@@ -29,11 +29,11 @@ describe("Dashboard Authentication", () => {
   it("renders login form with email and password fields", async () => {
     render(<LoginPage />);
     await waitFor(() => {
-      expect(screen.getByText("Consola del developer")).toBeInTheDocument();
+      expect(screen.getByText("Developer console")).toBeInTheDocument();
     });
     expect(screen.getByLabelText(/Email/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Contraseña/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Ingresar/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Password/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Sign in/i })).toBeInTheDocument();
   });
 
   it("shows error message on failed login", async () => {
@@ -41,7 +41,7 @@ describe("Dashboard Authentication", () => {
     vi.mocked(api.login).mockRejectedValueOnce(new Error("Invalid"));
     render(<LoginPage />);
     await waitFor(() => {
-      expect(screen.getByText("Consola del developer")).toBeInTheDocument();
+      expect(screen.getByText("Developer console")).toBeInTheDocument();
     });
     // Test would need to fill form and submit - simplified test
   });

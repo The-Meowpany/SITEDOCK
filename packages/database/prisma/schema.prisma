@@ -351,7 +351,7 @@ model WebsiteBackup {
   sourceDeployment   Deployment   @relation(fields: [sourceDeploymentId], references: [id])
   status             BackupStatus @default(READY)
   storagePath        String       @unique @map("storage_path")
-  // SHA-256 del contenido concatenado (keys ordenadas) � verificado antes de restaurar.
+  // SHA-256 of the concatenated content (keys sorted) — verified before restoring.
   integritySha256    String?      @map("integrity_sha256")
   sizeBytes          BigInt?      @map("size_bytes")
   createdAt          DateTime     @default(now()) @map("created_at")
@@ -551,7 +551,7 @@ model Payment {
   provider          String
   externalPaymentId String?       @map("external_payment_id")
   platformFeeCents  Int           @default(0) @map("platform_fee_cents")
-  // Fase 16 � reconciliaci�n contra Stripe: ancla al balance transaction oficial.
+  // Phase 16 — reconciliation against Stripe: anchor to the official balance transaction.
   externalBalanceTxnId String?    @map("external_balance_txn_id")
   refundedCents     Int           @default(0) @map("refunded_cents")
   createdAt         DateTime      @default(now()) @map("created_at")
@@ -565,7 +565,7 @@ model Payment {
   @@map("payments")
 }
 
-// ------------------------- MONEY MOVEMENTS (Fase 16) -------------------------
+// ------------------------- MONEY MOVEMENTS (Phase 16) -------------------------
 
 enum ConnectedAccountStatus {
   PENDING_ONBOARDING

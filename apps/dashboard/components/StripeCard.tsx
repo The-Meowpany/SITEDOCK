@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n";
 import { btnPrimary } from "./ui";
 import styles from "./StripeCard.module.css";
 
@@ -17,13 +18,16 @@ type MerchantStatus =
     };
 
 /**
- * Tarjeta de conexión con Stripe Connect (Fase 16): CTA de onboarding cuando
- * no hay cuenta, estado live/pending/restricted cuando existe. Solo visible
- * cuando el entorno tiene Stripe activo (la API responde 501 → se oculta).
+ * Stripe Connect connection card (Phase 16): onboarding CTA when
+ * there is no account, live/pending/restricted status when there is one. Only visible
+ * when the environment has Stripe enabled (the API answers 501 → it is hidden).
  */
 export function StripeCard() {
   const params = useParams<{ workspaceId: string }>();
   const workspaceId = params.workspaceId;
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const [status, setStatus] = useState<MerchantStatus | null>(null);
   const [hidden, setHidden] = useState(false);
@@ -36,7 +40,7 @@ export function StripeCard() {
       .then(setStatus)
       .catch((err) => {
         if (err instanceof Error && /STRIPE_NOT_CONFIGURED|501/i.test(err.message)) setHidden(true);
-        else setHidden(true); // sin Stripe configurado, la tarjeta no aporta
+        else setHidden(true); // without Stripe configured the card adds nothing
       });
   }, [workspaceId]);
 
@@ -48,10 +52,10 @@ export function StripeCard() {
     setBusy(true);
     setError(null);
     try {
-      // Onboarding hosted de Stripe: redirige fuera y vuelve al returnUrl.
+      // Stripe-hosted onboarding: redirects away and comes back to returnUrl.
       window.location.href = (await api.connectMerchant(workspaceId)).url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos iniciar la conexión.");
+      setError(err instanceof Error ? err.message : tRef.current("stripe.connectError"));
       setBusy(false);
     }
   }
@@ -60,36 +64,35 @@ export function StripeCard() {
 
   if (status.status === "ACTIVE") {
     return (
-      <section className={`${styles.card} ${styles.active}`} aria-label="Stripe conectado">
+      <section className={`${styles.card} ${styles.active}`} aria-label={t("stripe.connected")}>
         <span className={styles.dot} aria-hidden />
         <div>
-          <strong>Stripe conectado</strong>
-          <p className={styles.dim}>Cobros y transferencias habilitados para este workspace.</p>
+          <strong>{t("stripe.connected")}</strong>
+          <p className={styles.dim}>{t("stripe.connectedHint")}</p>
         </div>
         <a className={styles.link} href="https://dashboard.stripe.com" target="_blank" rel="noreferrer">
-          Abrir Stripe
+          {t("stripe.open")}
         </a>
       </section>
     );
   }
 
   return (
-    <section className={styles.card} aria-label="Conectar Stripe">
+    <section className={styles.card} aria-label={t("stripe.aria.connect")}>
       <div>
         <strong>
           {status.status === "PENDING_ONBOARDING"
-            ? "Onboarding de Stripe pendiente"
+            ? t("stripe.pending")
             : status.status === "RESTRICTED"
-              ? `Cuenta restringida${status.disabledReason ? ` — ${status.disabledReason}` : ""}`
-              : "Aceptá pagos reales"}
+              ? `${t("stripe.restricted")}${status.disabledReason ? ` — ${status.disabledReason}` : ""}`
+              : t("stripe.accept")}
         </strong>
         <p className={styles.dim}>
-          Conectá tu cuenta de Stripe para cobrar las suscripciones y los proyectos con dinero real.
-          SiteDock nunca retiene tus fondos.
+          {t("stripe.hint")}
         </p>
       </div>
       <button className={btnPrimary} disabled={busy} onClick={connect}>
-        {busy ? "Redirigiendo…" : status.status === "PENDING_ONBOARDING" ? "Continuar onboarding" : "Conectar con Stripe"}
+        {busy ? t("stripe.redirecting") : status.status === "PENDING_ONBOARDING" ? t("stripe.continue") : t("stripe.connect")}
       </button>
       {error && <p className={styles.error}>{error}</p>}
     </section>

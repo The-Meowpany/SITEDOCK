@@ -27,6 +27,25 @@ export interface WorkspaceSummary {
   role: "OWNER" | "ADMIN" | "DEVELOPER" | "CLIENT";
 }
 
+export type MemberRole = "ADMIN" | "DEVELOPER" | "CLIENT";
+
+export interface MemberSummary {
+  userId: string;
+  fullName: string | null;
+  email: string | null;
+  role: "OWNER" | MemberRole;
+  joinedAt: string | null;
+}
+
+export interface SessionInfo {
+  id: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  expiresAt: string;
+  current: boolean;
+}
+
 export interface MoneyBreakdown {
   currency: string;
   amountCents: number;
@@ -43,7 +62,7 @@ export interface WebsiteSummary {
   status: WebsiteStatus;
   projectId?: string;
   clientId: string | null;
-  /** Deployment actualmente publicado — undefined en listados viejos. */
+  /** Currently published deployment — undefined in old listings. */
   productionDeploymentId?: string | null;
 }
 
@@ -253,6 +272,60 @@ export const api = {
 
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
 
+  // ── Account ─────────────────────────────────────────────
+  updateProfile: (fullName: string) =>
+    request<{ fullName: string }>("/api/v1/auth/me", { method: "PATCH", body: JSON.stringify({ fullName }) }),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ revokedSessions: number }>("/api/v1/auth/me/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+
+  changeEmail: (newEmail: string, currentPassword: string) =>
+    request<{ email: string }>("/api/v1/auth/me/email", {
+      method: "POST",
+      body: JSON.stringify({ newEmail, currentPassword }),
+    }),
+
+  listSessions: () => request<SessionInfo[]>("/api/v1/auth/me/sessions"),
+
+  revokeSession: (sessionId: string) =>
+    request<void>(`/api/v1/auth/me/sessions/${sessionId}`, { method: "DELETE" }),
+
+  revokeOtherSessions: () =>
+    request<{ revoked: number }>("/api/v1/auth/me/sessions/revoke-others", { method: "POST" }),
+
+  deleteAccount: (currentPassword: string) =>
+    request<void>("/api/v1/auth/me", { method: "DELETE", body: JSON.stringify({ currentPassword }) }),
+
+  // ── Workspace team ───────────────────────────────────────
+  renameWorkspace: (workspaceId: string, name: string) =>
+    request<{ name: string }>(`/api/v1/workspaces/${workspaceId}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+
+  listMembers: (workspaceId: string) => request<MemberSummary[]>(`/api/v1/workspaces/${workspaceId}/members`),
+
+  changeMemberRole: (workspaceId: string, userId: string, role: MemberRole) =>
+    request<void>(`/api/v1/workspaces/${workspaceId}/members/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }),
+
+  removeMember: (workspaceId: string, userId: string) =>
+    request<void>(`/api/v1/workspaces/${workspaceId}/members/${userId}`, { method: "DELETE" }),
+
+  transferOwnership: (workspaceId: string, newOwnerUserId: string, currentPassword: string) =>
+    request<void>(`/api/v1/workspaces/${workspaceId}/transfer-ownership`, {
+      method: "POST",
+      body: JSON.stringify({ newOwnerUserId, currentPassword }),
+    }),
+
+  deleteWorkspace: (workspaceId: string, confirmName: string, currentPassword: string) =>
+    request<void>(`/api/v1/workspaces/${workspaceId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ confirmName, currentPassword }),
+    }),
+
   requestPasswordReset: (email: string) =>
     request<{ message: string }>("/api/v1/auth/password-reset/request", {
       method: "POST",
@@ -265,7 +338,7 @@ export const api = {
       body: JSON.stringify({ token, newPassword }),
     }),
 
-  // ── Workspaces / métricas ────────────────────────────────
+  // ── Workspaces / metrics ────────────────────────────────
   listWorkspaces: () => request<WorkspaceSummary[]>("/api/v1/workspaces"),
 
   getDashboard: (workspaceId: string) =>
@@ -289,7 +362,7 @@ export const api = {
       method: "DELETE",
     }),
 
-  // ── Proyectos y sitios ───────────────────────────────────
+  // ── Projects and sites ──────────────────────────────────
   listProjects: (workspaceId: string) =>
     request<ProjectSummary[]>(`/api/v1/workspaces/${workspaceId}/projects`),
 
@@ -437,7 +510,7 @@ export const api = {
       { method: "POST" }
     ),
 
-  // ── Clientes ─────────────────────────────────────────────
+  // ── Clients ─────────────────────────────────────────────
   listClients: (workspaceId: string) =>
     request<ClientSummary[]>(`/api/v1/workspaces/${workspaceId}/clients`),
 
@@ -447,7 +520,7 @@ export const api = {
       body: JSON.stringify({ fullName, email }),
     }),
 
-  /** Devuelve inviteUrl solo en modo demo; en producción viaja por email. */
+  /** Returns inviteUrl only in demo mode; in production it travels by email. */
   inviteClientToPortal: (workspaceId: string, email: string) =>
     request<{ invitationId: string; inviteUrl?: string }>(`/api/v1/workspaces/${workspaceId}/invitations`, {
       method: "POST",
@@ -497,7 +570,7 @@ export const api = {
       body: JSON.stringify(patch),
     }),
 
-  // ── Suscripciones y checkout ─────────────────────────────
+  // ── Subscriptions and checkout ──────────────────────────
   getSubscription: (workspaceId: string, websiteId: string, kind: PlanKind = "HOSTING") =>
     request<SubscriptionDetail | null>(
       `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/subscription?kind=${kind}`
@@ -518,7 +591,7 @@ export const api = {
       { method: "POST", body: "{}" }
     ),
 
-  // ── Mantenimiento ────────────────────────────────────────
+  // ── Maintenance ─────────────────────────────────────────
   listMaintenanceRequests: (workspaceId: string, websiteId: string) =>
     request<MaintenanceRequestSummary[]>(
       `/api/v1/workspaces/${workspaceId}/websites/${websiteId}/maintenance-requests`
@@ -591,7 +664,7 @@ export const api = {
       { method: "POST", body: JSON.stringify({ country }) }
     ),
 
-  // ── Cobros únicos (project fee) ──────────────────────────
+  // ── One-time charges (project fee) ──────────────────────
   listCharges: (workspaceId: string, websiteId: string) =>
     request<ChargeSummary[]>(`/api/v1/workspaces/${workspaceId}/websites/${websiteId}/charges`),
 

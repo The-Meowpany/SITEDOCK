@@ -17,7 +17,7 @@ export const publicDemoRouter = Router();
 
 publicDemoRouter.use(publicDemoRateLimiter);
 
-/** Fail closed doble: fuera de modo demo O con provider real no hay simulación. */
+/** Double fail-closed: outside demo mode OR with a real provider there is no simulation. */
 function requireDemoSimulator(sessionId: string): MockPaymentProvider {
   if (!config.allowDemoEndpoints || !demoSimulator) {
     throw new NotFoundError("Checkout", sessionId);
@@ -31,7 +31,7 @@ publicDemoRouter.get("/demo-checkout/:sessionId", async (req, res, next) => {
     const session = demo.describeSession(req.params.sessionId);
     if (!session) throw new NotFoundError("Checkout", req.params.sessionId);
 
-    let description = "Suscripción SiteDock";
+    let description = "SiteDock subscription";
     let alreadyPaid = false;
 
     if (session.kind === "ONE_TIME") {
@@ -43,8 +43,8 @@ publicDemoRouter.get("/demo-checkout/:sessionId", async (req, res, next) => {
       if (subscription) {
         description =
           subscription.billingInterval === "YEARLY"
-            ? "Membresía anual SiteDock"
-            : "Membresía mensual SiteDock";
+            ? "SiteDock annual membership"
+            : "SiteDock monthly membership";
         alreadyPaid = ["ACTIVE", "TRIALING"].includes(subscription.status);
       }
     }

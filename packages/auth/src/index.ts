@@ -5,6 +5,8 @@ export * from "./application/login-user.use-case";
 export * from "./application/logout-user.use-case";
 export * from "./application/password-reset.use-case";
 export * from "./application/admin-user.use-cases";
+export * from "./application/account-management.use-cases";
 export * from "./infrastructure/argon2-password-hasher";
 export * from "./infrastructure/prisma-user.repository";
 export * from "./infrastructure/prisma-session.repository";
+export * from "./infrastructure/prisma-account.repository";

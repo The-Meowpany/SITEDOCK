@@ -23,7 +23,7 @@ const retentionDays = Number(process.env.BACKUP_RETENTION_DAYS ?? DEFAULT_BACKUP
 const perItemRetryPolicy = RetryPolicy.create({ maxAttempts: 2, backoffMs: [2_000] });
 
 /**
- * Scheduled job (brief §29 "backup automático"): every LIVE website must have
+ * Scheduled job (brief §29 "automatic backup"): every LIVE website must have
  * a backup of its current production artifacts.
  *
  * Idempotent via the (websiteId, sourceDeploymentId) unique pair: a website

@@ -68,3 +68,12 @@
   border-color: var(--brand);
   color: var(--brand);
 }
+
+a.email {
+  text-decoration: none;
+}
+
+a.email:hover,
+a.email:focus-visible {
+  text-decoration: underline;
+}

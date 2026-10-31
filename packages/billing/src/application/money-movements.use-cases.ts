@@ -9,15 +9,15 @@ import {
 } from "../domain/money-gateways";
 import { PaymentRepository, RefundRepository } from "../domain/ports";
 
-/** Lectura tenant-scoped del lado interno de la reconciliación. */
+/** Tenant-scoped read of the internal side of the reconciliation. */
 export interface ReconciliationLedgerPort {
   listWorkspacePaymentsSince(workspaceId: string, since: Date): Promise<LedgerSidePayment[]>;
 }
 
 /**
- * Crea un refund (parcial por defecto = total si no se pasa monto) SOLO para
- * pagos reales de Stripe con payment_intent registrado. El estado definitivo
- * llega por webhook refund.succeeded — aquí solo se inicia.
+ * Creates a refund (partial by default = full if no amount is passed) ONLY for
+ * real Stripe payments with a registered payment_intent. The final state
+ * arrives via the refund.succeeded webhook — here it is only initiated.
  */
 export class CreateRefundUseCase {
   constructor(
@@ -64,14 +64,14 @@ export class CreateRefundUseCase {
       }
     }
 
-    // Gateway real → Stripe crea el refund AHORA (dinero en movimiento).
+    // Real gateway → Stripe creates the refund NOW (money in motion).
     const result = await this.gateway.createRefund({
       externalPaymentId: payment.externalPaymentId,
       amountCents,
       currency: payment.amount.currency,
     });
 
-    // Guard anti-duplicado por referencia externa del proveedor.
+    // Anti-duplicate guard by the provider's external reference.
     const existing = this.refunds ? await this.refunds.findByExternalRefundId(result.externalRefundId) : null;
     if (existing) return { refundId: existing.id, status: existing.status === "FAILED" ? ("PENDING" as const) : existing.status };
 
@@ -99,11 +99,11 @@ export interface ReconciliationReport {
 }
 
 /**
- * Fase 16 §4 — la pieza central: demuestra
+ * Phase 16 §4 — the central piece: proves
  *   Stripe balance transaction ↔ internal charge ↔ ledger ↔ merchant balance.
  *
- * No "arregla" nada: produce EXCEPCIONES explícitas para investigación. El
- * caller (admin route / scheduled job) decide auditarlas y alertar.
+ * It does not "fix" anything: it produces explicit EXCEPTIONS for investigation. The
+ * caller (admin route / scheduled job) decides whether to audit and alert on them.
  */
 export class ReconcileStripePaymentsUseCase {
   constructor(
@@ -119,8 +119,8 @@ export class ReconcileStripePaymentsUseCase {
 
     const stripeEntries = await this.source.listBalanceTransactions(since);
 
-    // Ledger side: pagos SUCCEEDED/REFUNDED del workspace dentro de la ventana,
-    // leídos por el port tenant-scoped (Prisma: invoice→subscription→website).
+    // Ledger side: SUCCEEDED/REFUNDED payments of the workspace within the window,
+    // read through the tenant-scoped port (Prisma: invoice→subscription→website).
     const ledgerPayments = await this.ledger.listWorkspacePaymentsSince(params.workspaceId, since);
     const exceptions = reconcilePayments(ledgerPayments, stripeEntries);
 

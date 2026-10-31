@@ -3,14 +3,14 @@ import { WorkspaceRepository } from "../domain/ports";
 
 export interface UpdateBrandingCommand {
   workspaceId: string;
-  /** NULL = limpiar branding (volver a SiteDock default). */
+  /** NULL = clear branding (revert to the SiteDock default). */
   branding: Record<string, unknown> | null;
 }
 
 /**
- * White-label step 1 (docs/WHITE_LABEL_ARCHITECTURE.md): actualiza el
- * branding del workspace (nombre visible, color primario, logo URL).
- * La autorización OWNER/ADMIN se resuelve en la capa interfaces.
+ * White-label step 1 (docs/WHITE_LABEL_ARCHITECTURE.md): updates the
+ * workspace branding (display name, primary color, logo URL).
+ * OWNER/ADMIN authorization is resolved in the interfaces layer.
  */
 export class UpdateWorkspaceBrandingUseCase {
   constructor(private readonly workspaces: WorkspaceRepository) {}
