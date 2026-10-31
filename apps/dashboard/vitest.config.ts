@@ -4,6 +4,7 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  oxc: { jsx: { runtime: "automatic", importSource: "react" } },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./"),
